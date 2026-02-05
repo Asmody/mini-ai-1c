@@ -29,6 +29,7 @@ tauri-app/src-tauri/Cargo.lock
 
 # Project specifics
 _archive/
+specs/
 temp/
 *.tmp
 temp_*.bsl
