@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { X, Plus, Save, Cpu, RefreshCw, CheckCircle, Monitor, FileCode, Download } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 
@@ -328,15 +329,15 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                         <div
                                             key={p.id}
                                             onClick={() => { setEditingProfile(p); setNewApiKey(''); setConnectionTestResult(null); }}
-                                            className={`p-3 rounded-lg border cursor-pointer transition-all ${editingProfile?.id === p.id
+                                            className={`p-2 rounded-lg border cursor-pointer transition-all ${editingProfile?.id === p.id
                                                 ? 'border-blue-500 bg-blue-500/10'
                                                 : 'border-zinc-800 bg-zinc-800 hover:border-zinc-600'
                                                 }`}
                                         >
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="font-medium text-zinc-200">{p.name}</div>
+                                            <div className="flex items-center justify-between mb-0.5">
+                                                <div className="font-medium text-sm text-zinc-200">{p.name}</div>
                                                 {p.id === profiles.active_profile_id && (
-                                                    <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Active</span>
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded-full">Active</span>
                                                 )}
                                             </div>
                                             <div className="text-xs text-zinc-500 truncate">{p.provider} / {p.model}</div>
@@ -380,22 +381,26 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                                 </div>
                                                 <div>
                                                     <label className="text-xs text-zinc-500 uppercase font-semibold mb-1 block">Provider</label>
-                                                    <select
+                                                    <Select
                                                         value={editingProfile.provider}
-                                                        onChange={(e) => {
-                                                            const provider = PROVIDERS.find(p => p.value === e.target.value);
+                                                        onValueChange={(val) => {
+                                                            const provider = PROVIDERS.find(p => p.value === val);
                                                             setEditingProfile({
                                                                 ...editingProfile,
-                                                                provider: e.target.value,
+                                                                provider: val,
                                                                 model: provider?.defaultModel || '',
                                                             });
                                                         }}
-                                                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                                     >
-                                                        {PROVIDERS.map((p) => (
-                                                            <option key={p.value} value={p.value}>{p.label}</option>
-                                                        ))}
-                                                    </select>
+                                                        <SelectTrigger className="w-full">
+                                                            <SelectValue placeholder="Select provider" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {PROVIDERS.map((p) => (
+                                                                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
                                             </div>
 
