@@ -4,12 +4,14 @@
 
 mod ai_client;
 mod bsl_client;
+mod bsl_installer;
 mod chat_history;
 mod commands;
 #[cfg(windows)]
 mod configurator;
 mod crypto;
-mod hotkeys;
+// Hotkeys removed
+// mod hotkeys;
 mod llm_profiles;
 mod settings;
 
@@ -22,7 +24,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(tokio::sync::Mutex::new(crate::bsl_client::BSLClient::new()))
         .invoke_handler(tauri::generate_handler![
             get_settings,
@@ -45,18 +47,19 @@ pub fn run() {
             delete_chat,
             save_chat_message,
             // Hotkeys
-            register_hotkeys_cmd,
+            // Hotkeys removed
             // LLM Utilities
             fetch_models_cmd,
             test_llm_connection_cmd,
             // BSL Utilities
-            check_bsl_status_cmd
+            check_bsl_status_cmd,
+            install_bsl_ls_cmd,
+            reconnect_bsl_ls_cmd,
+            diagnose_bsl_ls_cmd
         ])
         .setup(|app| {
-            // Register global hotkeys on startup
-            if let Err(e) = hotkeys::register_hotkeys(app.handle()) {
-                eprintln!("Failed to register hotkeys: {}", e);
-            }
+            // Hotkeys removed
+
 
             // Start BSL Language Server using managed state
             let app_handle = app.handle().clone();

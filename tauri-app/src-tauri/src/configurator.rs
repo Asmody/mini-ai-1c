@@ -2,8 +2,11 @@
 //! Handles window detection, hotkeys, and clipboard operations
 
 use windows::{
-    Win32::Foundation::HWND,
-    Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId},
+    Win32::Foundation::{HWND, MAX_PATH},
+    Win32::System::Threading::{
+        AttachThreadInput, GetCurrentThreadId, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    },
+    Win32::System::ProcessStatus::K32GetModuleFileNameExW,
     Win32::UI::Input::KeyboardAndMouse::{
         SendInput, SetFocus, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL, VK_A, VK_C, VK_V, VK_MENU,
     },
@@ -103,6 +106,33 @@ unsafe extern "system" fn enum_windows_callback(
     
     if !IsWindowVisible(hwnd).as_bool() {
         return windows::Win32::Foundation::BOOL::from(true);
+    }
+
+    // Check process name
+    let mut process_id = 0;
+    GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+    
+    if let Ok(process_handle) = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, process_id) {
+        let mut buffer = [0u16; MAX_PATH as usize];
+        let len = K32GetModuleFileNameExW(process_handle, None, &mut buffer);
+        let _ = windows::Win32::Foundation::CloseHandle(process_handle); // Always close handle
+
+        if len > 0 {
+            let process_path = OsString::from_wide(&buffer[..len as usize])
+                .to_string_lossy()
+                .to_string()
+                .to_lowercase();
+            
+            // Allow 1cv8 (Client/Configurator), 1cv8c (Thin Client), 1cv8s (Thick Client)
+            // But usually Configurator runs as 1cv8.exe
+            let is_1c = process_path.ends_with("1cv8.exe") || 
+                        process_path.ends_with("1cv8c.exe") || 
+                        process_path.ends_with("1cv8s.exe");
+            
+            if !is_1c {
+                return windows::Win32::Foundation::BOOL::from(true);
+            }
+        }
     }
     
     let mut buffer = [0u16; 512];

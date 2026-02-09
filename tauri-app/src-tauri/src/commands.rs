@@ -258,13 +258,7 @@ pub fn save_chat_message(role: String, content: String) -> Result<(), String> {
     chat_history::save_message(&role, &content)
 }
 
-// ============== Hotkeys ==============
-
-/// Register global hotkeys
-#[tauri::command]
-pub fn register_hotkeys_cmd(app_handle: tauri::AppHandle) -> Result<(), String> {
-    crate::hotkeys::register_hotkeys(&app_handle)
-}
+// Hotkeys removed
 
 // ============== LLM Utilities ==============
 
@@ -316,4 +310,81 @@ pub async fn check_bsl_status_cmd(
         java_info,
         connected,
     })
+}
+
+/// Install (download) BSL Language Server
+#[tauri::command]
+pub async fn install_bsl_ls_cmd(app: tauri::AppHandle) -> Result<String, String> {
+    crate::bsl_installer::download_bsl_ls(app).await
+}
+
+/// Reconnect BSL Language Server (stop and restart)
+#[tauri::command]
+pub async fn reconnect_bsl_ls_cmd(
+    state: tauri::State<'_, tokio::sync::Mutex<crate::bsl_client::BSLClient>>
+) -> Result<(), String> {
+    let mut client = state.lock().await;
+    
+    // Stop current server if running
+    client.stop();
+    
+    // Start server again
+    client.start_server()?;
+    
+    // Drop lock to allow connection
+    drop(client);
+    
+    // Wait a bit for server to start
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+    
+    // Try to connect
+    let mut client = state.lock().await;
+    client.connect().await?;
+    
+    Ok(())
+}
+
+/// Diagnose BSL LS launch issues
+#[tauri::command]
+pub async fn diagnose_bsl_ls_cmd() -> String {
+    let settings = settings::load_settings();
+    let mut report = String::new();
+
+    report.push_str(&format!("Java Path: {}\n", settings.bsl_server.java_path));
+    report.push_str(&format!("JAR Path: {}\n", settings.bsl_server.jar_path));
+
+    let jar_exists = std::path::Path::new(&settings.bsl_server.jar_path).exists();
+    report.push_str(&format!("JAR Exists: {}\n", jar_exists));
+
+    if !jar_exists {
+        return report;
+    }
+
+    report.push_str("Attempting to spawn process...\n");
+    
+    let mut cmd = std::process::Command::new(&settings.bsl_server.java_path);
+    cmd.args([
+        "-jar",
+        &settings.bsl_server.jar_path,
+        "--help"
+    ]);
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // NO_WINDOW
+    }
+
+    match cmd.output() {
+        Ok(output) => {
+            report.push_str(&format!("Exit Status: {}\n", output.status));
+            report.push_str(&format!("Stdout: {}\n", String::from_utf8_lossy(&output.stdout)));
+            report.push_str(&format!("Stderr: {}\n", String::from_utf8_lossy(&output.stderr)));
+        }
+        Err(e) => {
+            report.push_str(&format!("Failed to execute: {}\n", e));
+        }
+    }
+
+    report
 }

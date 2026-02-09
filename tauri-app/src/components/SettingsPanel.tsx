@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import { X, Plus, Save, Key, Cpu, RefreshCw, CheckCircle, Monitor, FileCode } from 'lucide-react';
+import { X, Plus, Save, Cpu, RefreshCw, CheckCircle, Monitor, FileCode, Download } from 'lucide-react';
 
 
 
@@ -35,8 +36,6 @@ interface AppSettings {
     configurator: {
         window_title_pattern: string;
         selected_window_hwnd: number | null;
-        capture_on_hotkey: boolean;
-        hotkey: string;
     };
     bsl_server: {
         jar_path: string;
@@ -79,6 +78,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
     // BSL state
     const [bslStatus, setBslStatus] = useState<BslStatus | null>(null);
+    const [downloading, setDownloading] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
     // LLM state
     const [modelList, setModelList] = useState<string[]>([]);
@@ -236,6 +237,48 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 bsl_server: { ...settings.bsl_server, jar_path: file as string }
             });
         }
+    };
+
+    // --- BSL Download ---
+    const handleDownloadBslLs = async () => {
+        setDownloading(true);
+        setDownloadProgress(0);
+
+        // Listen for progress events
+        const unlisten = await listen<{ percent: number }>('bsl-download-progress', (event) => {
+            setDownloadProgress(event.payload.percent);
+        });
+
+        try {
+            console.log('[Settings] Starting BSL LS download...');
+            const path = await invoke<string>('install_bsl_ls_cmd');
+            console.log('[Settings] BSL LS downloaded to:', path);
+
+            if (settings) {
+                setSettings({
+                    ...settings,
+                    bsl_server: { ...settings.bsl_server, jar_path: path }
+                });
+            }
+
+            // Reconnect BSL LS
+            console.log('[Settings] Reconnecting BSL LS...');
+            try {
+                await invoke('reconnect_bsl_ls_cmd');
+            } catch (e) {
+                console.warn('[Settings] Reconnect failed:', e);
+            }
+
+            setTimeout(refreshBslStatus, 2000);
+            alert('BSL LS installed successfully!');
+        } catch (e) {
+            console.error('[Settings] BSL download error:', e);
+            alert('Error downloading BSL LS: ' + e);
+        }
+
+        unlisten();
+        setDownloading(false);
+        setDownloadProgress(0);
     };
 
     if (!isOpen) return null;
@@ -511,38 +554,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                     </div>
                                 </section>
 
-                                <section>
-                                    <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-                                        <Key className="w-5 h-5 text-blue-500" />
-                                        Capture Settings
-                                    </h3>
-                                    <div className="bg-zinc-800/50 border border-zinc-700 rounded-xl p-5 space-y-4">
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={settings.configurator.capture_on_hotkey}
-                                                onChange={(e) => setSettings({
-                                                    ...settings,
-                                                    configurator: { ...settings.configurator, capture_on_hotkey: e.target.checked }
-                                                })}
-                                                className="rounded bg-zinc-700 border-zinc-600 text-blue-500 focus:ring-blue-500"
-                                            />
-                                            <span className="text-sm">Capture on Hotkey</span>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-zinc-500 uppercase font-semibold mb-1 block">Hotkey</label>
-                                            <input
-                                                type="text"
-                                                value={settings.configurator.hotkey}
-                                                onChange={(e) => setSettings({
-                                                    ...settings,
-                                                    configurator: { ...settings.configurator, hotkey: e.target.value }
-                                                })}
-                                                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                            />
-                                        </div>
-                                    </div>
-                                </section>
+
                             </div>
                         </div>
                     )}
@@ -583,7 +595,29 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                                 />
                                                 <button onClick={browseJar} className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm">Browse</button>
+                                                <button
+                                                    onClick={handleDownloadBslLs}
+                                                    disabled={downloading}
+                                                    className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 border border-green-700 rounded-lg text-sm text-white flex items-center gap-1"
+                                                >
+                                                    <Download className="w-3 h-3" />
+                                                    {downloading ? 'Downloading...' : 'Download'}
+                                                </button>
                                             </div>
+                                            {downloading && (
+                                                <div className="mt-2 space-y-1">
+                                                    <div className="flex justify-between text-xs text-zinc-400">
+                                                        <span>Downloading BSL Language Server...</span>
+                                                        <span>{downloadProgress}%</span>
+                                                    </div>
+                                                    <div className="w-full h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-green-500 transition-all duration-300"
+                                                            style={{ width: `${downloadProgress}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div>

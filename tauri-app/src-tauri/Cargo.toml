@@ -27,7 +27,6 @@ aes-gcm = "0.10"
 rand = "0.8"
 base64 = "0.22"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
-tauri-plugin-global-shortcut = "2"
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
 
@@ -37,6 +36,7 @@ windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
-    "Win32_UI_Input_KeyboardAndMouse"
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_ProcessStatus"
 ] }
 clipboard-win = "5.4"

@@ -34,8 +34,6 @@ interface AppSettings {
   configurator: {
     window_title_pattern: string;
     selected_window_hwnd: number | null;
-    capture_on_hotkey: boolean;
-    hotkey: string;
   };
   bsl_server: {
     jar_path: string;
@@ -183,38 +181,11 @@ function App() {
       });
     });
 
-    // Listen for hotkey capture from 1C
-    const unlistenHotkey = listen('hotkey-capture', async () => {
-      // Hotkey capture uses the SELECTED window if available, otherwise searches
-      const targetHwnd = settings?.configurator.selected_window_hwnd;
-
-      let code: string = '';
-      if (targetHwnd) {
-        try {
-          code = await invoke<string>('get_code_from_configurator', { hwnd: targetHwnd, useSelectAll: false });
-        } catch (e) {
-          console.warn("Capture from selected window failed, falling back to search", e);
-        }
-      }
-
-      if (!code) {
-        const windows = await invoke<Array<{ hwnd: number; title: string }>>('find_configurator_windows_cmd', { pattern: 'Конфигуратор' });
-        if (windows.length > 0) {
-          code = await invoke<string>('get_code_from_configurator', { hwnd: windows[0].hwnd, useSelectAll: false });
-        }
-      }
-
-      if (code) {
-        setInput(prev => prev + (prev ? '\n\n' : '') + '```bsl\n' + code + '\n```');
-      }
-    });
-
     return () => {
       unlistenChunk.then(fn => fn());
       unlistenDone.then(fn => fn());
-      unlistenHotkey.then(fn => fn());
     };
-  }, [settings]); // Re-bind listener if settings change (to get fresh selected_window_hwnd) -> actually listener might capture closure, improved to use ref or dependency
+  }, []);
 
   const refreshConfigurators = async (pattern: string = 'Конфигуратор') => {
     try {
@@ -280,6 +251,8 @@ function App() {
       }
     }
   };
+
+
 
   const handleApplyToConfigurator = async () => {
     setIsApplying(true);

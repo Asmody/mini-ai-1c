@@ -10,8 +10,6 @@ use std::path::PathBuf;
 pub struct ConfiguratorSettings {
     pub window_title_pattern: String,
     pub selected_window_hwnd: Option<isize>,
-    pub capture_on_hotkey: bool,
-    pub hotkey: String,
 }
 
 impl Default for ConfiguratorSettings {
@@ -19,8 +17,6 @@ impl Default for ConfiguratorSettings {
         Self {
             window_title_pattern: "Конфигуратор".to_string(),
             selected_window_hwnd: None,
-            capture_on_hotkey: true,
-            hotkey: "Ctrl+Shift+1".to_string(),
         }
     }
 }

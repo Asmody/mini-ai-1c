@@ -38,3 +38,5 @@ temp_*.bsl
 .env
 settings.json
 llm_profiles.json
+
+backup/
