@@ -26,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_mcp_bridge::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(tokio::sync::Mutex::new(crate::bsl_client::BSLClient::new()))
         .invoke_handler(tauri::generate_handler![
             get_settings,

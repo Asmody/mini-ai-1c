@@ -30,6 +30,7 @@ base64 = "0.22"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
 
 
 [target.'cfg(windows)'.dependencies]
