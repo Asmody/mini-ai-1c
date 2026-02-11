@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
@@ -215,7 +215,6 @@ function App() {
         const last = prev[lastIndex];
         if (last && last.role === 'assistant') {
           invoke('save_chat_message', { role: 'assistant', content: last.content });
-
         }
         return prev;
       });
@@ -227,6 +226,13 @@ function App() {
       unlistenDone.then(fn => fn());
     };
   }, []);
+
+  // Auto-hide side panel when code is empty
+  useEffect(() => {
+    if (!originalCode.trim() && !modifiedCode.trim() && showSidePanel) {
+      setShowSidePanel(false);
+    }
+  }, [originalCode, modifiedCode]);
 
 
   const refreshConfigurators = async (pattern: string = 'Конфигуратор') => {
@@ -422,6 +428,11 @@ function App() {
     appWindow.close().catch(e => console.error('Close error:', e));
   };
 
+  const handleApplyCode = useCallback((code: string) => {
+    setModifiedCode(code);
+    setShowSidePanel(true);
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-transparent">
       {/* Custom Title Bar */}
@@ -527,25 +538,32 @@ function App() {
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[11px] font-bold text-zinc-400">4</span>
                     <p className="leading-relaxed">Проверьте изменения в режиме <b className="text-zinc-400">Diff</b> и нажмите <b className="text-blue-400">Apply Changes</b> для вставки кода в 1С.</p>
                   </div>
+
+                  <div className="flex gap-4 p-3 bg-blue-500/5 rounded-xl border border-blue-500/10 mt-2">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                      <FileText className="w-3.5 h-3.5 text-blue-400" />
+                    </div>
+                    <p className="leading-relaxed text-zinc-400">
+                      По всем вопросам и предложениям пишите автору: <a href="https://t.me/hawkxtreme" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline font-semibold decoration-blue-400/30 underline-offset-4">@hawkxtreme</a>
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
 
-            <div className={`flex flex-col pb-4 gap-2 px-4`}>
+            <div className={`flex flex-col pb-4 gap-2 px-4 w-full`}>
               {messages.map((msg, i) => (
                 <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] p-3 rounded-lg border text-[12px] leading-snug ${msg.role === 'user'
+                  <div className={`w-full max-w-full p-4 rounded-xl border text-[13px] leading-relaxed ${msg.role === 'user'
                     ? 'bg-[#1b1b1f] border-zinc-800 text-zinc-300'
                     : 'bg-zinc-900/40 border-zinc-800/50 text-zinc-300'}`}>
-                    <div className="min-w-0 overflow-hidden">
+                    <div className="min-w-0">
                       {msg.role === 'assistant' ? (
                         <div className="flex flex-col gap-2">
                           <MarkdownRenderer
                             content={msg.content}
-                            onApplyCode={(code) => {
-                              setModifiedCode(code);
-                              setShowSidePanel(true);
-                            }}
+                            isStreaming={isLoading && i === messages.length - 1}
+                            onApplyCode={handleApplyCode}
                           />
                         </div>
                       ) : (

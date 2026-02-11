@@ -263,7 +263,17 @@ export function CodeSidePanel({
                             </thead>
                             <tbody>
                                 {diagnostics.map((d, i) => (
-                                    <tr key={i} className="border-b border-[#27272a]/30 hover:bg-[#27272a]/50 transition-colors group cursor-pointer">
+                                    <tr
+                                        key={i}
+                                        onClick={() => {
+                                            if (editorRef.current) {
+                                                editorRef.current.revealLineInCenter(d.line);
+                                                editorRef.current.setPosition({ lineNumber: d.line, column: 1 });
+                                                editorRef.current.focus();
+                                            }
+                                        }}
+                                        className="border-b border-[#27272a]/30 hover:bg-[#27272a]/50 transition-colors group cursor-pointer"
+                                    >
                                         <td className={`px-3 py-1.5 text-[11px] font-mono whitespace-nowrap align-top ${d.severity === 'error' ? 'text-red-400' : 'text-yellow-400'}`}>
                                             {d.line}
                                         </td>
