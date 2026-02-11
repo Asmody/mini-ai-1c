@@ -99,6 +99,8 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
+  const [chatStatus, setChatStatus] = useState('');
+
   // Handle automatic window resizing when side panel is opened
   useEffect(() => {
     if (showSidePanel) {
@@ -201,8 +203,13 @@ function App() {
       });
     });
 
+    const unlistenStatus = listen<string>('chat-status', (event) => {
+      setChatStatus(event.payload);
+    });
+
     const unlistenDone = listen('chat-done', () => {
       setIsLoading(false);
+      setChatStatus('');
       setMessages(prev => {
         const lastIndex = prev.length - 1;
         const last = prev[lastIndex];
@@ -216,9 +223,11 @@ function App() {
 
     return () => {
       unlistenChunk.then(fn => fn());
+      unlistenStatus.then(fn => fn());
       unlistenDone.then(fn => fn());
     };
   }, []);
+
 
   const refreshConfigurators = async (pattern: string = 'Конфигуратор') => {
     try {
@@ -546,14 +555,15 @@ function App() {
                   </div>
                 </div>
               ))}
-              {isLoading && messages[messages.length - 1]?.role === 'user' && (
+              {isLoading && (
                 <div className="w-full px-4 mb-4">
                   <div className="p-6 rounded-xl border border-[#27272a] bg-transparent flex items-center gap-3">
                     <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                    <span className="text-zinc-400 text-sm">Thinking...</span>
+                    <span className="text-zinc-400 text-sm">{chatStatus || 'Thinking...'}</span>
                   </div>
                 </div>
               )}
+
             </div>
             <div ref={messagesEndRef} />
           </div>

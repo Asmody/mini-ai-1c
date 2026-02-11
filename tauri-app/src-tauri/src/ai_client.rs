@@ -54,10 +54,11 @@ const SYSTEM_PROMPT: &str = r#"Ты - AI-ассистент для разраб�
 Используй русский язык в ответах. Форматируй код в блоках ```bsl...```."#;
 
 /// Stream chat completion from OpenAI-compatible API
+/// Returns the full accumulated response text
 pub async fn stream_chat_completion(
     messages: Vec<ApiMessage>,
     app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let profile = get_active_profile().ok_or("No active LLM profile")?;
     
     let api_key = profile.get_api_key();
@@ -139,6 +140,7 @@ pub async fn stream_chat_completion(
     // Stream response
     let mut stream = response.bytes_stream();
     let mut buffer = String::new();
+    let mut full_response = String::new();
     
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
@@ -153,13 +155,13 @@ pub async fn stream_chat_completion(
             for line in event.lines() {
                 if let Some(data) = line.strip_prefix("data: ") {
                     if data == "[DONE]" {
-                        let _ = app_handle.emit("chat-done", ());
-                        return Ok(());
+                        return Ok(full_response);
                     }
                     
                     if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
                         if let Some(choice) = chunk.choices.first() {
                             if let Some(content) = &choice.delta.content {
+                                full_response.push_str(content);
                                 let _ = app_handle.emit("chat-chunk", content.clone());
                             }
                         }
@@ -169,9 +171,41 @@ pub async fn stream_chat_completion(
         }
     }
     
-    let _ = app_handle.emit("chat-done", ());
-    Ok(())
+    Ok(full_response)
 }
+
+/// Helper to extract BSL code blocks from text
+pub fn extract_bsl_code(text: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut start_pos = 0;
+    
+    while let Some(start) = text[start_pos..].find("```bsl") {
+        let actual_start = start_pos + start + 6;
+        if let Some(end) = text[actual_start..].find("```") {
+            let code = &text[actual_start..actual_start + end];
+            blocks.push(code.trim().to_string());
+            start_pos = actual_start + end + 3;
+        } else {
+            break;
+        }
+    }
+    
+    // Also try ```1c just in case
+    start_pos = 0;
+    while let Some(start) = text[start_pos..].find("```1c") {
+        let actual_start = start_pos + start + 5;
+        if let Some(end) = text[actual_start..].find("```") {
+            let code = &text[actual_start..actual_start + end];
+            blocks.push(code.trim().to_string());
+            start_pos = actual_start + end + 3;
+        } else {
+            break;
+        }
+    }
+    
+    blocks
+}
+
 
 /// Fetch models from provider
 pub async fn fetch_models(profile: &crate::llm_profiles::LLMProfile) -> Result<Vec<String>, String> {

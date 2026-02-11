@@ -2,9 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ai_client::{stream_chat_completion, ApiMessage};
+use crate::ai_client::ApiMessage;
 use crate::llm_profiles::{self, LLMProfile, ProfileStore};
 use crate::settings::{self, AppSettings};
+
 
 /// Chat message structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,14 +81,22 @@ pub fn set_active_profile(profile_id: String) -> Result<(), String> {
     llm_profiles::save_profiles(&store)
 }
 
-/// Stream chat response using AI client
+/// Stream chat response using AI client with automatic BSL correction
 #[tauri::command]
 pub async fn stream_chat(
     messages: Vec<ChatMessage>,
     app_handle: tauri::AppHandle,
+    state: tauri::State<'_, tokio::sync::Mutex<crate::bsl_client::BSLClient>>,
 ) -> Result<(), String> {
+    use crate::ai_client::{extract_bsl_code, stream_chat_completion, ApiMessage};
+    use crate::bsl_client::BSLClient;
+    use tauri::Emitter;
+
+    // 1. Initial status
+    let _ = app_handle.emit("chat-status", "Thinking...");
+
     // Convert to API messages
-    let api_messages: Vec<ApiMessage> = messages
+    let mut api_messages: Vec<ApiMessage> = messages
         .into_iter()
         .map(|m| ApiMessage {
             role: m.role,
@@ -95,9 +104,100 @@ pub async fn stream_chat(
         })
         .collect();
 
-    // Stream chat completion
-    stream_chat_completion(api_messages, app_handle).await
+    let mut current_iteration = 0;
+    const MAX_FIX_ATTEMPTS: u32 = 3;
+
+    loop {
+        // Stream chat completion
+        let full_response = stream_chat_completion(api_messages.clone(), app_handle.clone()).await?;
+        
+        // Add response to history for potential next round
+        api_messages.push(ApiMessage {
+            role: "assistant".to_string(),
+            content: full_response.clone(),
+        });
+
+        // 2. Extract and Validate BSL Code
+        let bsl_blocks = extract_bsl_code(&full_response);
+        if bsl_blocks.is_empty() {
+             // No code to validate, we are done
+             break;
+        }
+
+        let _ = app_handle.emit("chat-status", "Validating BSL code...");
+        
+        // 30 second timeout for validation
+        let validation_result = tokio::time::timeout(
+            tokio::time::Duration::from_secs(30),
+            async {
+                let mut client = state.lock().await;
+                if !client.is_connected() {
+                    let _ = client.connect().await;
+                }
+
+                let mut all_errors = Vec::new();
+                for (idx, code) in bsl_blocks.iter().enumerate() {
+                    let uri = format!("file:///iteration_{}_{}.bsl", current_iteration, idx);
+                    match client.analyze_code(code, &uri).await {
+                        Ok(diagnostics) => {
+                            let errors: Vec<_> = diagnostics.into_iter()
+                                .filter(|d| d.severity == Some(1)) // Only Errors
+                                .collect();
+                            
+                            if !errors.is_empty() {
+                                let error_str = errors.iter()
+                                    .map(|e| format!("- Line {}: {}", e.range.start.line + 1, e.message))
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                all_errors.push(format!("Block {}:\n{}", idx + 1, error_str));
+                            }
+                        }
+                        Err(e) => {
+                            println!("[AutoFix] Check failed for block {}: {}", idx + 1, e);
+                        }
+                    }
+                }
+                all_errors
+            }
+        ).await;
+
+        let all_errors = match validation_result {
+            Ok(errors) => errors,
+            Err(_) => {
+                let _ = app_handle.emit("chat-status", "Ошибка проверки кода: Таймаут (30с)");
+                let _ = app_handle.emit("chat-chunk", "\n\n> [!WARNING]\n> Проверка кода BSL заняла слишком много времени и была прервана.\n\n".to_string());
+                break; // Break the auto-fix loop on timeout
+            }
+        };
+
+        // 3. Decide whether to fix or end
+        if all_errors.is_empty() || current_iteration >= MAX_FIX_ATTEMPTS {
+            break;
+        }
+
+        // We have errors and attempts left
+        current_iteration += 1;
+        let _ = app_handle.emit("chat-status", format!("Fixing errors (Attempt {}/{})...", current_iteration, MAX_FIX_ATTEMPTS));
+
+        let fix_prompt = format!(
+            "В сгенерированном коде обнаружены ошибки:\n\n{}\n\nПожалуйста, исправь эти ошибки и предоставь корректный код.",
+            all_errors.join("\n\n")
+        );
+
+        api_messages.push(ApiMessage {
+            role: "user".to_string(),
+            content: fix_prompt,
+        });
+
+        // Let the user know we are re-generating
+        let _ = app_handle.emit("chat-chunk", "\n\n---\n*Обнаружены ошибки. Исправляю...*\n\n".to_string());
+    }
+
+    let _ = app_handle.emit("chat-status", ""); // Clear status
+    let _ = app_handle.emit("chat-done", ());
+    Ok(())
 }
+
 
 /// BSL analysis result
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -18,7 +18,7 @@ mod settings;
 
 use commands::*;
 
-use tauri::Manager;
+use tauri::{Manager, tray::TrayIconBuilder};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -62,6 +62,12 @@ pub fn run() {
             diagnose_bsl_ls_cmd
         ])
         .setup(|app| {
+            // Setup Tray Icon
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("Mini AI 1C")
+                .build(app)?;
+
             // Hotkeys removed
 
 
