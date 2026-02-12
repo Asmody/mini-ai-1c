@@ -39,7 +39,7 @@
 
 1.  **Клонируйте репозиторий**
     ```bash
-    git clone https://github.com/yourusername/mini-ai-1c.git
+    git clone https://github.com/hawkxtreme/mini-ai-1c
     cd mini-ai-1c/tauri-app
     ```
 
