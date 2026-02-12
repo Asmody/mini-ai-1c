@@ -62,25 +62,9 @@ pub async fn stream_chat_completion(
     let profile = get_active_profile().ok_or("No active LLM profile")?;
     
     let api_key = profile.get_api_key();
-    if api_key.is_empty() {
-        return Err("API key not configured for this profile".to_string());
-    }
     
     // Build base URL
-    let base_url = profile.base_url.clone().unwrap_or_else(|| {
-        match profile.provider {
-            LLMProvider::OpenAI => "https://api.openai.com/v1".to_string(),
-            LLMProvider::Anthropic => "https://api.anthropic.com/v1".to_string(),
-            LLMProvider::OpenRouter => "https://openrouter.ai/api/v1".to_string(),
-            LLMProvider::Google => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
-            LLMProvider::DeepSeek => "https://api.deepseek.com".to_string(),
-            LLMProvider::Groq => "https://api.groq.com/openai/v1".to_string(),
-            LLMProvider::Mistral => "https://api.mistral.ai/v1".to_string(),
-            LLMProvider::XAI => "https://api.x.ai/v1".to_string(),
-            LLMProvider::Perplexity => "https://api.perplexity.ai".to_string(),
-            LLMProvider::Custom => String::new(),
-        }
-    });
+    let base_url = profile.get_base_url();
     
     let url = format!("{}/chat/completions", base_url);
     
@@ -103,11 +87,14 @@ pub async fn stream_chat_completion(
     // Build headers
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {}", api_key))
-            .map_err(|e| e.to_string())?,
-    );
+    
+    if !api_key.is_empty() {
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", api_key))
+                .map_err(|e| e.to_string())?,
+        );
+    }
     
     // For OpenRouter, add extra headers
     if matches!(profile.provider, LLMProvider::OpenRouter) {
@@ -210,9 +197,6 @@ pub fn extract_bsl_code(text: &str) -> Vec<String> {
 /// Fetch models from provider
 pub async fn fetch_models(profile: &crate::llm_profiles::LLMProfile) -> Result<Vec<String>, String> {
     let api_key = profile.get_api_key();
-    if api_key.is_empty() {
-        return Err("API key not configured".to_string());
-    }
 
     let base_url = profile.get_base_url();
     // Heuristic: append /models if not present, strip /v1 if needed? 
@@ -226,9 +210,11 @@ pub async fn fetch_models(profile: &crate::llm_profiles::LLMProfile) -> Result<V
     let client = reqwest::Client::new();
     let mut builder = client.get(&url);
 
-    builder = builder
-        .header(CONTENT_TYPE, "application/json")
-        .header(AUTHORIZATION, format!("Bearer {}", api_key));
+    builder = builder.header(CONTENT_TYPE, "application/json");
+
+    if !api_key.is_empty() {
+        builder = builder.header(AUTHORIZATION, format!("Bearer {}", api_key));
+    }
 
     // Special handling for OpenRouter
     if matches!(profile.provider, LLMProvider::OpenRouter) {

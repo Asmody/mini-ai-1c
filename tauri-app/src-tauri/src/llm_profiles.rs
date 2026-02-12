@@ -18,6 +18,7 @@ pub enum LLMProvider {
     Mistral,
     XAI,
     Perplexity,
+    Ollama,
     Custom,
 }
 
@@ -44,6 +45,7 @@ pub struct LLMProfile {
     pub base_url: Option<String>,
     pub max_tokens: u32,
     pub temperature: f32,
+    pub context_window_override: Option<u32>,
 }
 
 impl LLMProfile {
@@ -58,6 +60,7 @@ impl LLMProfile {
             base_url: None,
             max_tokens: 4096,
             temperature: 0.7,
+            context_window_override: None,
         }
     }
 
@@ -82,11 +85,12 @@ impl LLMProfile {
                 LLMProvider::Anthropic => "https://api.anthropic.com/v1".to_string(),
                 LLMProvider::OpenRouter => "https://openrouter.ai/api/v1".to_string(),
                 LLMProvider::Google => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
-                LLMProvider::DeepSeek => "https://api.deepseek.com".to_string(),
+                LLMProvider::DeepSeek => "https://api.deepseek.com/v1".to_string(),
                 LLMProvider::Groq => "https://api.groq.com/openai/v1".to_string(),
                 LLMProvider::Mistral => "https://api.mistral.ai/v1".to_string(),
                 LLMProvider::XAI => "https://api.x.ai/v1".to_string(),
                 LLMProvider::Perplexity => "https://api.perplexity.ai".to_string(),
+                LLMProvider::Ollama => "http://localhost:11434/v1".to_string(),
                 LLMProvider::Custom => String::new(),
             }
         })
@@ -110,23 +114,34 @@ pub fn load_profiles() -> ProfileStore {
     if path.exists() {
         match fs::read_to_string(&path) {
             Ok(content) => {
-                let mut store: ProfileStore = serde_json::from_str(&content).unwrap_or_default();
-                if store.profiles.is_empty() {
-                    store.profiles.push(LLMProfile::default_profile());
-                    store.active_profile_id = "default".to_string();
+                match serde_json::from_str::<ProfileStore>(&content) {
+                    Ok(mut store) => {
+                        if store.profiles.is_empty() {
+                            store.profiles.push(LLMProfile::default_profile());
+                            store.active_profile_id = "default".to_string();
+                        }
+                        store
+                    }
+                    Err(e) => {
+                        eprintln!("[LLM Profiles] Failed to parse profiles file: {}. Creating defaults.", e);
+                        create_default_store()
+                    }
                 }
-                store
             }
-            Err(_) => ProfileStore {
-                profiles: vec![LLMProfile::default_profile()],
-                active_profile_id: "default".to_string(),
-            },
+            Err(e) => {
+                eprintln!("[LLM Profiles] Failed to read profiles file: {}. Creating defaults.", e);
+                create_default_store()
+            }
         }
     } else {
-        ProfileStore {
-            profiles: vec![LLMProfile::default_profile()],
-            active_profile_id: "default".to_string(),
-        }
+        create_default_store()
+    }
+}
+
+fn create_default_store() -> ProfileStore {
+    ProfileStore {
+        profiles: vec![LLMProfile::default_profile()],
+        active_profile_id: "default".to_string(),
     }
 }
 

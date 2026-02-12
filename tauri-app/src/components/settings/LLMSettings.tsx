@@ -26,16 +26,16 @@ interface LLMSettingsProps {
 }
 
 const PROVIDERS = [
-    { value: 'OpenAI', label: 'OpenAI', defaultModel: 'gpt-4o', defaultUrl: 'https://api.openai.com' },
-    { value: 'Anthropic', label: 'Anthropic', defaultModel: 'claude-3-5-sonnet-latest', defaultUrl: 'https://api.anthropic.com' },
+    { value: 'OpenAI', label: 'OpenAI', defaultModel: 'gpt-4o', defaultUrl: 'https://api.openai.com/v1' },
+    { value: 'Anthropic', label: 'Anthropic', defaultModel: 'claude-3-5-sonnet-latest', defaultUrl: 'https://api.anthropic.com/v1' },
     { value: 'Google', label: 'Google Gemini', defaultModel: 'gemini-1.5-pro', defaultUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-    { value: 'DeepSeek', label: 'DeepSeek', defaultModel: 'deepseek-chat', defaultUrl: 'https://api.deepseek.com' },
+    { value: 'DeepSeek', label: 'DeepSeek', defaultModel: 'deepseek-chat', defaultUrl: 'https://api.deepseek.com/v1' },
     { value: 'Groq', label: 'Groq', defaultModel: 'llama-3.3-70b-versatile', defaultUrl: 'https://api.groq.com/openai/v1' },
     { value: 'Mistral', label: 'Mistral AI', defaultModel: 'mistral-large-latest', defaultUrl: 'https://api.mistral.ai/v1' },
     { value: 'XAI', label: 'xAI (Grok)', defaultModel: 'grok-beta', defaultUrl: 'https://api.x.ai/v1' },
     { value: 'Perplexity', label: 'Perplexity', defaultModel: 'sonar-reasoning', defaultUrl: 'https://api.perplexity.ai' },
     { value: 'OpenRouter', label: 'OpenRouter', defaultModel: 'google/gemini-2.0-flash-001', defaultUrl: 'https://openrouter.ai/api/v1' },
-    { value: 'Ollama', label: 'Ollama (Local)', defaultModel: 'llama3', defaultUrl: 'http://localhost:11434' },
+    { value: 'Ollama', label: 'Ollama (Local)', defaultModel: 'llama3', defaultUrl: 'http://localhost:11434/v1' },
     { value: 'Custom', label: 'Custom / Other', defaultModel: '', defaultUrl: '' },
 ];
 
@@ -135,7 +135,14 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                 const sorted = [...res].sort((a, b) => a.id.localeCompare(b.id));
                 setModelList(sorted);
             } else {
-                alert("Please enter API Key first.");
+                // Case: No API key provided (e.g. Ollama/Local)
+                const res = await invoke<any[]>('fetch_models_from_provider', {
+                    providerId: editForm.provider,
+                    baseUrl: editForm.base_url || PROVIDERS.find(p => p.value === editForm.provider)?.defaultUrl || '',
+                    apiKey: ''
+                });
+                const sorted = [...res].sort((a, b) => a.id.localeCompare(b.id));
+                setModelList(sorted);
             }
 
         } catch (e) {
@@ -251,8 +258,8 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                 <label className="text-xs text-zinc-500 uppercase font-bold px-1">Model ID</label>
                                 <button
                                     onClick={handleFetchModels}
-                                    disabled={loadingModels || (!newApiKey && !editForm.api_key_encrypted)}
-                                    title={!newApiKey && !editForm.api_key_encrypted ? "Enter API Key to fetch models" : "Fetch models from API"}
+                                    disabled={loadingModels}
+                                    title={"Fetch models from API"}
                                     className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <RefreshCw className={`w-3 h-3 ${loadingModels ? 'animate-spin' : ''}`} />

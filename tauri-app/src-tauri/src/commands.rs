@@ -435,9 +435,6 @@ pub async fn fetch_models_for_profile(profile_id: String) -> Result<Vec<crate::l
         .ok_or("Profile not found")?;
 
     let api_key = profile.get_api_key();
-    if api_key.is_empty() {
-        return Err("API key not found in profile".to_string());
-    }
 
     let base_url = profile.get_base_url(); // Logic to get URL or default
     // Note: profile.get_base_url() might return default if None.

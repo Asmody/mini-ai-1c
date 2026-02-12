@@ -44,9 +44,13 @@ pub async fn fetch_models_from_api(_provider_id: &str, base_url: &str, api_key: 
     };
 
     // Basic logic for OpenAI compatible APIs
-    let resp = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
+    let mut builder = client.get(&url);
+    
+    if !api_key.is_empty() {
+        builder = builder.header("Authorization", format!("Bearer {}", api_key));
+    }
+
+    let resp = builder
         .send()
         .await
         .map_err(|e| e.to_string())?;
