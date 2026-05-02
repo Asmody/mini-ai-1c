@@ -9,6 +9,7 @@ import { CodexAuthModal } from './CodexAuthModal';
 import { CliStatus, CliUsageWindow } from '../../types/settings';
 
 import { LLMProfile, ProfileStore } from '../../contexts/ProfileContext';
+import { applyFetchedModelMetadata, applySelectedModelMetadata } from '../../utils/llmProfileModelMetadata';
 import { isOllamaCloudProfile } from '../../utils/profileHelpers';
 
 interface LLMSettingsProps {
@@ -148,11 +149,7 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                         // Sync max_tokens for the currently selected model
                         const currentModel = sorted.find((m: any) => m.id === p.model);
                         if (currentModel?.context_window) {
-                            setEditForm(prev => prev?.id === p.id ? ({
-                                ...prev,
-                                max_tokens: currentModel.context_window || prev.max_tokens,
-                                context_window_override: currentModel.context_window
-                            }) : prev);
+                            setEditForm(prev => prev?.id === p.id ? applyFetchedModelMetadata(prev, currentModel) : prev);
                         }
                     }).catch(e => {
                         console.error('[LLMSettings] Failed to auto-fetch MiniMax models:', e);
@@ -171,11 +168,7 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                         setModelList(sorted);
                         const currentModel = sorted.find((m: any) => m.id === p.model);
                         if (currentModel?.context_window) {
-                            setEditForm(prev => prev?.id === p.id ? ({
-                                ...prev,
-                                max_tokens: currentModel.context_window || prev.max_tokens,
-                                context_window_override: currentModel.context_window
-                            }) : prev);
+                            setEditForm(prev => prev?.id === p.id ? applyFetchedModelMetadata(prev, currentModel) : prev);
                         }
                     }).catch(e => {
                         console.error('[LLMSettings] Failed to auto-fetch LMStudio/Ollama models:', e);
@@ -191,11 +184,7 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                         setModelList(sorted);
                         const currentModel = sorted.find((m: any) => m.id === p.model);
                         if (currentModel?.context_window) {
-                            setEditForm(prev => prev?.id === p.id ? ({
-                                ...prev,
-                                max_tokens: currentModel.context_window || prev.max_tokens,
-                                context_window_override: currentModel.context_window
-                            }) : prev);
+                            setEditForm(prev => prev?.id === p.id ? applyFetchedModelMetadata(prev, currentModel) : prev);
                         }
                     }).catch(e => {
                         console.error('[LLMSettings] Failed to auto-fetch Ollama Cloud models:', e);
@@ -324,11 +313,7 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
             if (editForm.model) {
                 const currentModel = sortedModels.find(m => m.id === editForm.model);
                 if (currentModel) {
-                    setEditForm(prev => prev ? ({
-                        ...prev,
-                        max_tokens: currentModel.context_window || prev.max_tokens,
-                        context_window_override: currentModel.context_window
-                    }) : null);
+                    setEditForm(prev => prev ? applyFetchedModelMetadata(prev, currentModel) : null);
                 }
             }
         } catch (e) {
@@ -918,12 +903,10 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                             const m = modelList.find(m => m.id === v);
                                             setEditForm(prev => {
                                                 if (!prev) return prev;
-                                                return {
-                                                    ...prev,
-                                                    model: v,
-                                                    max_tokens: m?.context_window || prev.max_tokens,
-                                                    context_window_override: m?.context_window
-                                                };
+                                                return applySelectedModelMetadata(prev, {
+                                                    id: v,
+                                                    context_window: m?.context_window,
+                                                });
                                             });
                                         }}
                                     >
