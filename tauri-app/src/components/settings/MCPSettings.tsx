@@ -174,7 +174,6 @@ interface MCPSettingsProps {
     nodePath: string;
     bslEnabled?: boolean;
     onUpdate: (servers: McpServerConfig[]) => void;
-    onNodePathChange: (nodePath: string) => void;
 }
 
 const BUILTIN_1C_SERVER_ID = 'builtin-1c-naparnik';
@@ -183,7 +182,7 @@ const BUILTIN_BSL_LS_ID = 'bsl-ls';
 const BUILTIN_1C_HELP_ID = 'builtin-1c-help';
 const BUILTIN_1C_SEARCH_ID = 'builtin-1c-search';
 
-export function MCPSettings({ servers, nodePath, bslEnabled, onUpdate, onNodePathChange }: MCPSettingsProps) {
+export function MCPSettings({ servers, nodePath, bslEnabled, onUpdate }: MCPSettingsProps) {
     const [testingId, setTestingId] = useState<string | null>(null);
     const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
     const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({});
@@ -205,22 +204,6 @@ export function MCPSettings({ servers, nodePath, bslEnabled, onUpdate, onNodePat
     const [benchmarkResult, setBenchmarkResult] = useState<Record<string, any> | null>(null);
     const [isBenchmarking, setIsBenchmarking] = useState(false);
     const effectiveNodePath = normalizeNodePath(nodePath);
-
-    const browseNodePath = async () => {
-        try {
-            const file = await open({
-                multiple: false,
-                directory: false,
-                filters: [{ name: 'Node.js', extensions: ['exe'] }],
-                title: 'Выберите node.exe'
-            });
-            if (file && typeof file === 'string') {
-                onNodePathChange(file);
-            }
-        } catch (error) {
-            console.error('Failed to open node executable dialog:', error);
-        }
-    };
 
     const addToSearchHistory = (path: string) => {
         if (!path.trim()) return;
@@ -562,28 +545,6 @@ export function MCPSettings({ servers, nodePath, bslEnabled, onUpdate, onNodePat
                         className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
                     >
                         <Plus className="w-4 h-4" /> Добавить сервер
-                    </button>
-                </div>
-            </div>
-
-            <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/50 p-3">
-                <label className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1 mb-1.5">
-                    <Terminal className="w-3 h-3" /> Node.js
-                </label>
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        value={nodePath}
-                        onChange={(e) => onNodePathChange(e.target.value)}
-                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono min-w-0"
-                        placeholder="node или C:\portable\node\node.exe"
-                    />
-                    <button
-                        onClick={() => void browseNodePath()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-lg text-xs font-medium transition shrink-0"
-                        title="Выбрать node.exe"
-                    >
-                        <FolderOpen className="w-3.5 h-3.5" />
                     </button>
                 </div>
             </div>

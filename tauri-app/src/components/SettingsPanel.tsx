@@ -344,10 +344,9 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                             <div className="max-w-2xl mx-auto">
                                 <MCPSettings
                                     servers={settings.mcp_servers}
-                                    nodePath={settings.node_path ?? 'node'}
+                                    nodePath={settings.node_path}
                                     bslEnabled={settings.bsl_server.enabled}
                                     onUpdate={(mcpServers) => setSettings({ ...settings, mcp_servers: mcpServers })}
-                                    onNodePathChange={(nodePath) => setSettings({ ...settings, node_path: nodePath })}
                                 />
                             </div>
                         </div>
