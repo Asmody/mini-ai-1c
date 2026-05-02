@@ -10,15 +10,15 @@
 <!-- news:end -->
 
 <!-- release-news:start -->
-> **📋 Последний релиз: версия 1.2.5** — 27 апреля 2026
+> **📋 Последний релиз: версия 1.2.6** — 2 мая 2026
 >
-> - **Провайдер MiniMax** — новый LLM-провайдер с поддержкой стриминга и tool calls
-> - **Конфигуратор: чипы паттернов заголовка окна** — удобный выбор шаблона через UI-чипы
-> - **Копирование кода** — кнопка копирования в блоках кода чата
-> - **Codex/GPT**: модель по умолчанию обновлена до gpt-5.5
-> - **Исправлено**: Ctrl+V в Конфигураторе, сброс счётчика токенов, декодирование HTML-entities
+> - **Ollama Cloud как отдельный провайдер LLM** — подключение к ollama.com через API-ключ, контексты до 1M токенов, 120s chunk timeout для thinking-моделей (qwen3-coder:480b, kimi-k2-thinking, glm-4.7)
+> - **1С:Напарник: локальное применение SEARCH/REPLACE-диффов** + MCP-bridge для облачного Напарника
+> - **MiniMax M2**: распознавание альтернативной diff-схемы и снятие 120s обрыва длинных стримов ([#156](https://github.com/hawkxtreme/mini-ai-1c/issues/156))
+> - **EditorBridge**: per-user pipe — больше нет «Access is denied» на терминальных серверах ([#141](https://github.com/hawkxtreme/mini-ai-1c/issues/141))
+> - **UI**: читаемый текст системных предупреждений в светлой теме ([#159](https://github.com/hawkxtreme/mini-ai-1c/issues/159)), лимит сохранённых чатов поднят до 50
 >
-> [Подробнее о релизе →](https://github.com/hawkxtreme/mini-ai-1c/releases/tag/v1.2.5) · [Все релизы →](https://github.com/hawkxtreme/mini-ai-1c/releases)
+> [Подробнее о релизе →](https://github.com/hawkxtreme/mini-ai-1c/releases/tag/v1.2.6) · [Все релизы →](https://github.com/hawkxtreme/mini-ai-1c/releases)
 <!-- release-news:end -->
 
 > 🐛 **Нашли баг или есть вопрос?** Прочитайте [как правильно сообщить о проблеме →](how-to-report-an-issue.md) — там пошагово: что написать, как снять логи приложения и MCP-логи, и готовый шаблон issue.
