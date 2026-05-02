@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Database, Link2, Key, ShieldCheck, Activity, CheckCircle2, AlertCircle, Plus, Trash2, Globe, Settings2, Terminal, Cpu, FileText, X, Sparkles, FolderOpen, ChevronDown, Code, Wrench } from 'lucide-react';
 import McpToolsView from '../CodeSidePanel/McpToolsView';
+import { isBuiltinNodeLauncher, normalizeNodePath } from '../../utils/mcpNodePath';
 
 // ── Benchmark Panel ───────────────────────────────────────────────────────────
 
@@ -170,8 +171,10 @@ export interface McpServerStatus {
 
 interface MCPSettingsProps {
     servers: McpServerConfig[];
+    nodePath: string;
     bslEnabled?: boolean;
     onUpdate: (servers: McpServerConfig[]) => void;
+    onNodePathChange: (nodePath: string) => void;
 }
 
 const BUILTIN_1C_SERVER_ID = 'builtin-1c-naparnik';
@@ -180,7 +183,7 @@ const BUILTIN_BSL_LS_ID = 'bsl-ls';
 const BUILTIN_1C_HELP_ID = 'builtin-1c-help';
 const BUILTIN_1C_SEARCH_ID = 'builtin-1c-search';
 
-export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps) {
+export function MCPSettings({ servers, nodePath, bslEnabled, onUpdate, onNodePathChange }: MCPSettingsProps) {
     const [testingId, setTestingId] = useState<string | null>(null);
     const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
     const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({});
@@ -201,6 +204,23 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
     const [jsonImportError, setJsonImportError] = useState<string | null>(null);
     const [benchmarkResult, setBenchmarkResult] = useState<Record<string, any> | null>(null);
     const [isBenchmarking, setIsBenchmarking] = useState(false);
+    const effectiveNodePath = normalizeNodePath(nodePath);
+
+    const browseNodePath = async () => {
+        try {
+            const file = await open({
+                multiple: false,
+                directory: false,
+                filters: [{ name: 'Node.js', extensions: ['exe'] }],
+                title: 'Выберите node.exe'
+            });
+            if (file && typeof file === 'string') {
+                onNodePathChange(file);
+            }
+        } catch (error) {
+            console.error('Failed to open node executable dialog:', error);
+        }
+    };
 
     const addToSearchHistory = (path: string) => {
         if (!path.trim()) return;
@@ -220,9 +240,9 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
 
     // Ensure pre-installed servers exist
     useEffect(() => {
-        // Use npx --yes to auto-install tsx without prompting (cached after first run)
-        const naparnikArgs = ['--yes', 'tsx', 'src/mcp-servers/1c-naparnik.ts'];
-        const metadataArgs = ['--yes', 'tsx', 'src/mcp-servers/1c-metadata.ts'];
+        const naparnikArgs = ['mcp-servers/1c-naparnik.cjs'];
+        const metadataArgs = ['mcp-servers/1c-metadata.cjs'];
+        const helpArgs = ['mcp-servers/1c-help.cjs'];
 
         let updatedServers = [...servers];
         let needsUpdate = false;
@@ -235,17 +255,16 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                 name: '1C:Напарник',
                 enabled: false,
                 transport: 'stdio',
-                command: 'npx',
+                command: effectiveNodePath,
                 args: naparnikArgs,
                 env: { 'ONEC_AI_TOKEN': '' }
             });
             needsUpdate = true;
         } else {
             const srv = updatedServers[naparnikIndex];
-            // Allow both npx and node (backend might migrate to node)
-            const isSupportedCmd = srv.command === 'npx' || srv.command === 'node';
-            if (!isSupportedCmd) {
-                updatedServers[naparnikIndex] = { ...srv, command: 'npx', args: naparnikArgs };
+            const isSupportedCmd = isBuiltinNodeLauncher(srv.command, effectiveNodePath);
+            if (!isSupportedCmd || srv.command !== effectiveNodePath || JSON.stringify(srv.args ?? []) !== JSON.stringify(naparnikArgs)) {
+                updatedServers[naparnikIndex] = { ...srv, command: effectiveNodePath, args: naparnikArgs };
                 needsUpdate = true;
             }
         }
@@ -258,16 +277,16 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                 name: '1C:Метаданные',
                 enabled: false,
                 transport: 'stdio',
-                command: 'npx',
+                command: effectiveNodePath,
                 args: metadataArgs,
                 env: { 'ONEC_METADATA_URL': 'http://localhost/base/hs/mcp', 'ONEC_USERNAME': '', 'ONEC_PASSWORD': '' }
             });
             needsUpdate = true;
         } else {
             const srv = updatedServers[metadataIndex];
-            const isSupportedCmd = srv.command === 'npx' || srv.command === 'node';
-            if (!isSupportedCmd) {
-                updatedServers[metadataIndex] = { ...srv, command: 'npx', args: metadataArgs };
+            const isSupportedCmd = isBuiltinNodeLauncher(srv.command, effectiveNodePath);
+            if (!isSupportedCmd || srv.command !== effectiveNodePath || JSON.stringify(srv.args ?? []) !== JSON.stringify(metadataArgs)) {
+                updatedServers[metadataIndex] = { ...srv, command: effectiveNodePath, args: metadataArgs };
                 needsUpdate = true;
             }
         }
@@ -292,16 +311,16 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                 name: '1С:Справка',
                 enabled: false,
                 transport: 'stdio',
-                command: 'npx',
-                args: ['--yes', 'tsx', 'src/mcp-servers/1c-help.ts'],
+                command: effectiveNodePath,
+                args: helpArgs,
                 env: { 'ONEC_HELP_PATH': '' },
             });
             needsUpdate = true;
         } else {
             const srv = updatedServers[helpIndex];
-            const isSupportedCmd = srv.command === 'npx' || srv.command === 'node';
-            if (!isSupportedCmd) {
-                updatedServers[helpIndex] = { ...srv, command: 'npx', args: ['--yes', 'tsx', 'src/mcp-servers/1c-help.ts'] };
+            const isSupportedCmd = isBuiltinNodeLauncher(srv.command, effectiveNodePath);
+            if (!isSupportedCmd || srv.command !== effectiveNodePath || JSON.stringify(srv.args ?? []) !== JSON.stringify(helpArgs)) {
+                updatedServers[helpIndex] = { ...srv, command: effectiveNodePath, args: helpArgs };
                 needsUpdate = true;
             }
         }
@@ -352,7 +371,7 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
         if (needsUpdate) {
             onUpdate(updatedServers);
         }
-    }, [servers, onUpdate]);
+    }, [servers, onUpdate, effectiveNodePath]);
 
     const fetchStatuses = async () => {
         try {
@@ -543,6 +562,28 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                         className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
                     >
                         <Plus className="w-4 h-4" /> Добавить сервер
+                    </button>
+                </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/50 p-3">
+                <label className="text-[10px] text-zinc-500 uppercase font-bold flex items-center gap-1 mb-1.5">
+                    <Terminal className="w-3 h-3" /> Node.js
+                </label>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={nodePath}
+                        onChange={(e) => onNodePathChange(e.target.value)}
+                        className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:outline-none font-mono min-w-0"
+                        placeholder="node или C:\portable\node\node.exe"
+                    />
+                    <button
+                        onClick={() => void browseNodePath()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-zinc-100 rounded-lg text-xs font-medium transition shrink-0"
+                        title="Выбрать node.exe"
+                    >
+                        <FolderOpen className="w-3.5 h-3.5" />
                     </button>
                 </div>
             </div>
