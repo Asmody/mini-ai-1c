@@ -552,6 +552,7 @@ mod tests {
                     stream_timeout_secs: Some(60),
                     context_compress_strategy: "summarize".to_string(),
                     max_context_messages: Some(50),
+                    disable_native_tools: None,
                 },
                 LLMProfile {
                     id: "profile-2".to_string(),
@@ -569,6 +570,7 @@ mod tests {
                     stream_timeout_secs: Some(30),
                     context_compress_strategy: "disabled".to_string(),
                     max_context_messages: None,
+                    disable_native_tools: None,
                 },
             ],
             active_profile_id: "profile-2".to_string(),
