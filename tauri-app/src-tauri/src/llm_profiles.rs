@@ -78,6 +78,11 @@ pub struct LLMProfile {
     /// Threshold: compress when dialog messages exceed this count (default 40)
     #[serde(default)]
     pub max_context_messages: Option<u32>,
+    /// Не передавать `tools` в payload. Полезно для моделей с битым jinja-шаблоном
+    /// (например Gemma 4 26B APEX в LM Studio), где LM Studio тихо возвращает 200 OK
+    /// с пустым стримом, если шаблон не смог отрендерить tools.
+    #[serde(default)]
+    pub disable_native_tools: Option<bool>,
 }
 
 impl LLMProfile {
@@ -99,6 +104,7 @@ impl LLMProfile {
             stream_timeout_secs: None,
             context_compress_strategy: String::new(),
             max_context_messages: None,
+            disable_native_tools: None,
         }
     }
 
