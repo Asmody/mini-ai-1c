@@ -903,10 +903,17 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                             const m = modelList.find(m => m.id === v);
                                             setEditForm(prev => {
                                                 if (!prev) return prev;
-                                                return applySelectedModelMetadata(prev, {
-                                                    id: v,
-                                                    context_window: m?.context_window,
-                                                });
+                                                const isLocalProvider =
+                                                    prev.provider === 'Ollama' ||
+                                                    prev.provider === 'LMStudio';
+                                                return applySelectedModelMetadata(
+                                                    prev,
+                                                    {
+                                                        id: v,
+                                                        context_window: m?.context_window,
+                                                    },
+                                                    { syncMaxTokens: !isLocalProvider },
+                                                );
                                             });
                                         }}
                                     >
@@ -944,12 +951,35 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                             <span className="ml-1 text-zinc-600 normal-case font-normal">(фиксировано 65536)</span>
                                         )}
                                     </label>
-                                    <input
-                                        type="number"
-                                        className="w-full mt-1 bg-zinc-900 border border-zinc-700 rounded-md px-3 h-9 text-sm text-zinc-200"
-                                        value={editForm.max_tokens}
-                                        onChange={e => setEditForm({ ...editForm, max_tokens: parseInt(e.target.value) || 0 })}
-                                    />
+                                    <div className="relative mt-1">
+                                        <input
+                                            type="number"
+                                            className="w-full bg-zinc-900 border border-zinc-700 rounded-md pl-3 pr-16 h-9 text-sm text-zinc-200"
+                                            value={editForm.max_tokens}
+                                            onChange={e => setEditForm({ ...editForm, max_tokens: parseInt(e.target.value) || 0 })}
+                                        />
+                                        {(() => {
+                                            const currentModel = modelList.find(m => m.id === editForm.model);
+                                            const ctx = currentModel?.context_window;
+                                            if (!ctx) return null;
+                                            const disabled = editForm.max_tokens === ctx;
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setEditForm(prev =>
+                                                            prev ? { ...prev, max_tokens: ctx } : prev,
+                                                        )
+                                                    }
+                                                    disabled={disabled}
+                                                    title={`Подставить максимум модели: ${ctx}`}
+                                                    className="absolute right-1 top-1 h-7 px-2 rounded text-[10px] uppercase font-bold tracking-wide bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                    ↑ max
+                                                </button>
+                                            );
+                                        })()}
+                                    </div>
                                 </div>
                                 {editForm.provider === 'CodexCli' ? (
                                     <div className="flex-1 min-w-[120px]">
