@@ -698,11 +698,13 @@ async fn run_message_loop(
                 }));
             } else {
                 items.push(serde_json::json!({
-                    "status": "accepted",
+                    "status": "rejected",
                     "tool_call_id": tc_id,
                     "name": name,
-                    "content": null,
-                    "details": { "auto_call": true }
+                    "content": format!(
+                        "Tool '{}' is not available on the Mini AI 1C client side.",
+                        name
+                    )
                 }));
             }
         }
