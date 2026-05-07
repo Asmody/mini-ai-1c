@@ -180,7 +180,56 @@ fn fnv_hash(s: &str) -> u64 {
 /// Initialize the database schema (creates all tables if they don't exist).
 /// Safe to call multiple times — all statements use CREATE IF NOT EXISTS.
 pub fn ensure_schema(db_path: &Path) -> Result<(), String> {
-    init_db(db_path).map(|_| ()).map_err(|e| e.to_string())
+    init_db_recovering(db_path).map(|_| ())
+}
+
+fn init_db_recovering(db_path: &Path) -> Result<Connection, String> {
+    match init_db(db_path) {
+        Ok(conn) => Ok(conn),
+        Err(err) if is_corrupt_db_error(&err) => {
+            quarantine_corrupt_db(db_path)?;
+            init_db(db_path).map_err(|e| e.to_string())
+        }
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+fn is_corrupt_db_error(err: &rusqlite::Error) -> bool {
+    let msg = err.to_string().to_lowercase();
+    msg.contains("database disk image is malformed")
+        || msg.contains("file is not a database")
+        || msg.contains("not a database")
+}
+
+pub fn quarantine_corrupt_db(db_path: &Path) -> Result<(), String> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    for suffix in ["", "-wal", "-shm"] {
+        let path = PathBuf::from(format!("{}{}", db_path.to_string_lossy(), suffix));
+        if !path.exists() {
+            continue;
+        }
+        let quarantined = PathBuf::from(format!(
+            "{}{}.corrupt-{}",
+            db_path.to_string_lossy(),
+            suffix,
+            ts
+        ));
+        fs::rename(&path, &quarantined).map_err(|e| {
+            format!(
+                "Индекс повреждён, но не удалось отложить {}: {}",
+                path.to_string_lossy(),
+                e
+            )
+        })?;
+        eprintln!(
+            "[1c-search] Corrupt SQLite index moved to {}",
+            quarantined.to_string_lossy()
+        );
+    }
+    Ok(())
 }
 
 fn init_db(db_path: &Path) -> Result<Connection, rusqlite::Error> {
@@ -656,7 +705,7 @@ pub struct SyncStats {
 pub fn sync_index(root: &Path, db_path: &Path) -> Result<SyncStats, String> {
     eprintln!("SEARCH_STATUS:syncing:0:Сравнение файлов...");
 
-    let conn = init_db(db_path).map_err(|e| format!("Ошибка БД: {}", e))?;
+    let conn = init_db_recovering(db_path).map_err(|e| format!("Ошибка БД: {}", e))?;
     let indexed_mtimes = load_indexed_mtimes(&conn);
 
     // Scan filesystem — collect all current .bsl files with their mtime
@@ -941,7 +990,7 @@ pub fn build_index(root: &Path, db_path: &Path) -> Result<usize, String> {
     // ── Serial phase: batch INSERT into SQLite ────────────────────────────────
     eprintln!("SEARCH_STATUS:indexing:95:Запись в индекс...");
 
-    let conn = init_db(db_path).map_err(|e| format!("Ошибка БД: {}", e))?;
+    let conn = init_db_recovering(db_path).map_err(|e| format!("Ошибка БД: {}", e))?;
 
     // Maximum write speed: memory journal, no sync, large cache, no indexes during insert
     let _ = conn.execute_batch(
@@ -1116,6 +1165,49 @@ fn sync_semantic_fts(conn: &Connection, deleted: &[String], parsed: &[ParsedFile
         let _ = tx.commit();
     }
     eprintln!("[1c-search] semantic FTS synced: {} symbols updated", file_pairs.len());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_schema_quarantines_corrupt_sqlite_file() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("mcp-1c-search-corrupt-db-{}", unique));
+        fs::create_dir_all(&dir).expect("temp dir should be created");
+        let db = dir.join("symbols.db");
+        fs::write(&db, b"this is not sqlite").expect("corrupt db should be written");
+
+        ensure_schema(&db).expect("schema init should quarantine corrupt db and recreate it");
+
+        let quarantined = fs::read_dir(&dir)
+            .expect("temp dir should be readable")
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("symbols.db.corrupt-")
+            });
+        assert!(quarantined, "corrupt db backup should be kept");
+
+        let conn = Connection::open(&db).expect("recreated db should open");
+        let table: String = conn
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='symbols'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("symbols table should exist");
+        assert_eq!(table, "symbols");
+
+        drop(conn);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 /// Query the index for symbols matching the query.

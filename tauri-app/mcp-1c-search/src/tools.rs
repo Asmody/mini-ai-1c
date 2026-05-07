@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 use crate::search;
 use crate::index;
+use crate::workspace::{self, SearchRoot, SearchWorkspace};
 
 /// Maps a 1C object type to its plural folder name in the config dump.
 fn object_type_to_folder(obj_type: &str) -> Option<&'static str> {
@@ -65,7 +66,7 @@ fn resolve_scope(scope: &str) -> Option<PathBuf> {
 }
 
 pub fn list_tools() -> Vec<Value> {
-    vec![
+    let mut tools = vec![
         json!({
             "name": "semantic_find",
             "description": "🔍 ПЕРВЫЙ ИНСТРУМЕНТ при поиске функции по описанию задачи. Семантический поиск по именам функций, комментариям, параметрам. ОБЯЗАТЕЛЕН как первый шаг если не знаешь точное имя функции. Запрос на русском языке: что делает функция, какой объект обрабатывает. Возвращает ТОП-5 функций с score — если score ≥ 0.5 это сильный результат.",
@@ -412,38 +413,255 @@ pub fn list_tools() -> Vec<Value> {
                 }
             }
         }),
-    ]
+    ];
+    add_source_id_schema(&mut tools);
+    tools
+}
+
+fn add_source_id_schema(tools: &mut [Value]) {
+    const SOURCE_AWARE_TOOLS: &[&str] = &[
+        "search_code",
+        "search_files",
+        "get_file_context",
+        "find_symbol",
+        "get_symbol_context",
+        "list_objects",
+        "get_object_structure",
+        "find_references",
+        "impact_analysis",
+        "get_function_context",
+        "get_module_functions",
+        "smart_find",
+        "semantic_find",
+        "find_function_in_object",
+        "stats",
+        "sync_index",
+        "benchmark",
+    ];
+
+    for tool in tools {
+        let Some(name) = tool["name"].as_str() else {
+            continue;
+        };
+        if !SOURCE_AWARE_TOOLS.contains(&name) {
+            continue;
+        }
+        let Some(properties) = tool["inputSchema"]["properties"].as_object_mut() else {
+            continue;
+        };
+        properties.insert(
+            "source_id".to_string(),
+            json!({
+                "type": "string",
+                "description": "ID источника рабочей области (из поля source.source_id в результатах). Если не указан, поисковые инструменты выполняются по основной конфигурации и расширениям, а контекстные инструменты выбирают основной источник или источник по file."
+            }),
+        );
+    }
 }
 
 pub async fn call_tool(
     name: &str,
     args: &Value,
-    config_path: &Option<PathBuf>,
-    db_path: &Option<PathBuf>,
+    workspace: &SearchWorkspace,
 ) -> Result<Value, String> {
     let start = std::time::Instant::now();
-    let result = match name {
-        "search_code" => handle_search_code(args, config_path, db_path).await,
-        "search_files" => handle_search_files(args, config_path, db_path).await,
-        "get_file_context" => handle_get_file_context(args, config_path).await,
-        "find_symbol" => handle_find_symbol(args, db_path).await,
-        "get_symbol_context" => handle_get_symbol_context(args, config_path, db_path).await,
-        "list_objects" => handle_list_objects(args, db_path).await,
-        "get_object_structure" => handle_get_object_structure(args, db_path, config_path).await,
-        "find_references" => handle_find_references(args, config_path).await,
-        "impact_analysis" => handle_impact_analysis(args, config_path, db_path).await,
-        "get_function_context" => handle_get_function_context(args, db_path).await,
-        "get_module_functions" => handle_get_module_functions(args, db_path).await,
-        "smart_find" => handle_smart_find(args, config_path, db_path).await,
-        "semantic_find" => handle_semantic_find(args, config_path, db_path).await,
-        "find_function_in_object" => handle_find_function_in_object(args, config_path, db_path).await,
-        "stats" => handle_stats(db_path).await,
-        "sync_index" => handle_sync_index(config_path, db_path).await,
-        "benchmark" => handle_benchmark(args, config_path, db_path).await,
-        _ => Err(format!("Неизвестный инструмент: {}", name)),
+    let result = if workspace.is_empty() {
+        Err("Конфигурация не настроена. Укажите путь в настройках MCP сервера.".to_string())
+    } else if should_run_on_all_roots(name, workspace, args) {
+        call_tool_multi_root(name, args, workspace).await
+    } else {
+        let root = workspace
+            .root_for_args(args)
+            .ok_or_else(|| "Не найден источник конфигурации для выполнения инструмента".to_string())?;
+        call_tool_single(name, args, root).await.map(|v| annotate_result(v, root))
     };
     eprintln!("[PERF] {} in {}ms", name, start.elapsed().as_millis());
     result
+}
+
+async fn call_tool_single(
+    name: &str,
+    args: &Value,
+    root: &SearchRoot,
+) -> Result<Value, String> {
+    let config_path = Some(root.path.clone());
+    let db_path = Some(workspace::root_db_path(root));
+    match name {
+        "search_code" => handle_search_code(args, &config_path, &db_path).await,
+        "search_files" => handle_search_files(args, &config_path, &db_path).await,
+        "get_file_context" => handle_get_file_context(args, &config_path).await,
+        "find_symbol" => handle_find_symbol(args, &db_path).await,
+        "get_symbol_context" => handle_get_symbol_context(args, &config_path, &db_path).await,
+        "list_objects" => handle_list_objects(args, &db_path).await,
+        "get_object_structure" => handle_get_object_structure(args, &db_path, &config_path).await,
+        "find_references" => handle_find_references(args, &config_path).await,
+        "impact_analysis" => handle_impact_analysis(args, &config_path, &db_path).await,
+        "get_function_context" => handle_get_function_context(args, &db_path).await,
+        "get_module_functions" => handle_get_module_functions(args, &db_path).await,
+        "smart_find" => handle_smart_find(args, &config_path, &db_path).await,
+        "semantic_find" => handle_semantic_find(args, &config_path, &db_path).await,
+        "find_function_in_object" => handle_find_function_in_object(args, &config_path, &db_path).await,
+        "stats" => handle_stats(&db_path).await,
+        "sync_index" => handle_sync_index(&config_path, &db_path).await,
+        "benchmark" => handle_benchmark(args, &config_path, &db_path).await,
+        _ => Err(format!("Неизвестный инструмент: {}", name)),
+    }
+}
+
+fn should_run_on_all_roots(name: &str, workspace: &SearchWorkspace, args: &Value) -> bool {
+    if workspace.roots.len() <= 1 || args["source_id"].as_str().is_some() {
+        return false;
+    }
+    matches!(
+        name,
+        "search_code"
+            | "search_files"
+            | "find_symbol"
+            | "list_objects"
+            | "get_object_structure"
+            | "find_references"
+            | "impact_analysis"
+            | "get_function_context"
+            | "smart_find"
+            | "semantic_find"
+            | "find_function_in_object"
+            | "stats"
+            | "sync_index"
+    )
+}
+
+async fn call_tool_multi_root(
+    name: &str,
+    args: &Value,
+    workspace: &SearchWorkspace,
+) -> Result<Value, String> {
+    let mut summary = format!(
+        "Выполнено по рабочей области: {} источн.\n\n",
+        workspace.roots.len()
+    );
+    let mut roots = Vec::new();
+    let mut errors = Vec::new();
+
+    for root in &workspace.roots {
+        if !workspace::root_exists(root) {
+            let message = format!("{}: директория не найдена ({})", root.name, root.path.to_string_lossy());
+            errors.push(json!({
+                "source": workspace::source_json(root),
+                "error": message
+            }));
+            continue;
+        }
+
+        match call_tool_single(name, args, root).await {
+            Ok(value) => {
+                let annotated = annotate_result(value, root);
+                let text = extract_content_text(&annotated);
+                summary.push_str(&format!(
+                    "### {} ({})\n{}\n\n",
+                    root.name,
+                    root.kind,
+                    if text.trim().is_empty() { "Инструмент вернул structured result без summary." } else { text.trim() }
+                ));
+                roots.push(json!({
+                    "source": workspace::source_json(root),
+                    "result": annotated.get("search_result").cloned().unwrap_or(annotated)
+                }));
+            }
+            Err(error) => {
+                summary.push_str(&format!("### {} ({})\nОшибка: {}\n\n", root.name, root.kind, error));
+                errors.push(json!({
+                    "source": workspace::source_json(root),
+                    "error": error
+                }));
+            }
+        }
+    }
+
+    if name == "sync_index" {
+        emit_multi_root_search_status(workspace, errors.is_empty());
+    }
+
+    Ok(json!({
+        "content": [{ "type": "text", "text": summary }],
+        "search_result": {
+            "schema_version": 1,
+            "tool": name,
+            "multi_root": true,
+            "active_profile_id": workspace.active_profile_id,
+            "roots": roots,
+            "errors": errors
+        }
+    }))
+}
+
+fn emit_multi_root_search_status(workspace: &SearchWorkspace, all_ok: bool) {
+    let mut total_symbols = 0usize;
+    let mut total_size = 0.0f64;
+    let mut last_built_at = 0u64;
+
+    for root in &workspace.roots {
+        if !workspace::root_exists(root) {
+            continue;
+        }
+        let db = workspace::root_db_path(root);
+        total_symbols += index::symbol_count(&db);
+        total_size += crate::db_size_mb(&db);
+        last_built_at = last_built_at.max(index::get_built_at(&db).unwrap_or(0));
+    }
+
+    let state = if all_ok { "ready" } else { "degraded" };
+    if all_ok {
+        eprintln!(
+            "SEARCH_STATUS:ready:{}:{:.2}:{}",
+            total_symbols, total_size, last_built_at
+        );
+    }
+    eprintln!(
+        "SEARCH_STATUS_JSON:{}",
+        json!({
+            "state": state,
+            "progress": 100,
+            "message": if all_ok {
+                format!("Индекс готов: {} источн.", workspace.roots.len())
+            } else {
+                "Часть индексов недоступна после синхронизации".to_string()
+            },
+            "sym_count": total_symbols,
+            "db_size_mb": total_size,
+            "built_at_unix": last_built_at
+        })
+    );
+}
+
+fn annotate_result(mut value: Value, root: &SearchRoot) -> Value {
+    let source = workspace::source_json(root);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("source".to_string(), source.clone());
+        if let Some(search_result) = obj.get_mut("search_result").and_then(|v| v.as_object_mut()) {
+            search_result.insert("source".to_string(), source.clone());
+            if let Some(items) = search_result.get_mut("items").and_then(|v| v.as_array_mut()) {
+                for item in items {
+                    if let Some(item_obj) = item.as_object_mut() {
+                        item_obj.insert("source".to_string(), source.clone());
+                    }
+                }
+            }
+        }
+    }
+    value
+}
+
+fn extract_content_text(value: &Value) -> String {
+    value["content"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
 }
 
 async fn handle_search_code(

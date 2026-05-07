@@ -55,6 +55,23 @@ pub(crate) fn builtin_search_unavailable_reason(config: &McpServerConfig) -> Opt
         return None;
     }
 
+    if let Some(profile_path) = active_search_profile_main_path(config) {
+        let path = std::path::Path::new(&profile_path);
+        if !path.exists() {
+            return Some(format!(
+                "Путь активной выгрузки конфигурации 1С не найден: {}",
+                profile_path
+            ));
+        }
+        if !path.is_dir() {
+            return Some(format!(
+                "Путь активной выгрузки конфигурации 1С должен указывать на директорию: {}",
+                profile_path
+            ));
+        }
+        return None;
+    }
+
     let config_path = config
         .env
         .as_ref()
@@ -82,6 +99,38 @@ pub(crate) fn builtin_search_unavailable_reason(config: &McpServerConfig) -> Opt
     }
 
     None
+}
+
+fn active_search_profile_main_path(config: &McpServerConfig) -> Option<String> {
+    let env = config.env.as_ref()?;
+    let json = env.get("ONEC_CONFIG_PROFILES_JSON")?.trim();
+    if json.is_empty() {
+        return None;
+    }
+    let profiles = serde_json::from_str::<serde_json::Value>(json).ok()?;
+    let profiles = profiles.as_array()?;
+    let active_id = env
+        .get("ONEC_CONFIG_ACTIVE_PROFILE_ID")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let selected = active_id
+        .and_then(|id| {
+            profiles
+                .iter()
+                .find(|profile| profile["id"].as_str() == Some(id))
+        })
+        .or_else(|| {
+            profiles.iter().find(|profile| {
+                profile["main_path"]
+                    .as_str()
+                    .map(|path| !path.trim().is_empty())
+                    .unwrap_or(false)
+            })
+        })?;
+    selected["main_path"]
+        .as_str()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
 }
 
 #[async_trait]

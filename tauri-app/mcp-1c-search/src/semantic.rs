@@ -660,12 +660,13 @@ mod tests {
     #[test]
     fn test_query_tokenizer() {
         let tokens = tokenize_query("найди функцию которая из Справочника СтавкиНДС делает Перечисление");
-        assert!(tokens.contains(&"справочника".to_string()), "got {:?}", tokens);
-        assert!(tokens.contains(&"ставкиндс".to_string()), "got {:?}", tokens);
+        assert!(tokens.contains(&"ставки".to_string()), "got {:?}", tokens);
+        assert!(tokens.contains(&"ндс".to_string()), "got {:?}", tokens);
         assert!(tokens.contains(&"перечисление".to_string()), "got {:?}", tokens);
         // stop words filtered
         assert!(!tokens.contains(&"найди".to_string()), "stop word should be filtered");
         assert!(!tokens.contains(&"функцию".to_string()), "stop word should be filtered");
+        assert!(!tokens.contains(&"справочника".to_string()), "stop word should be filtered");
     }
 
     #[test]
