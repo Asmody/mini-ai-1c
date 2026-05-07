@@ -50,6 +50,22 @@ fn format_unix_msk(unix: u64) -> String {
 
 pub(crate) const BUILTIN_1C_SEARCH_SERVER_ID: &str = "builtin-1c-search";
 
+fn is_stdio_node_launcher_command(command: &str) -> bool {
+    let normalized = command
+        .trim()
+        .trim_matches('"')
+        .replace('\\', "/")
+        .to_lowercase();
+
+    normalized == "npx"
+        || normalized == "npx.cmd"
+        || normalized == "node"
+        || normalized == "node.exe"
+        || normalized.ends_with("/node")
+        || normalized.ends_with("/node.exe")
+        || normalized.contains("tsx")
+}
+
 pub(crate) fn builtin_search_unavailable_reason(config: &McpServerConfig) -> Option<String> {
     if config.id != BUILTIN_1C_SEARCH_SERVER_ID {
         return None;
@@ -1052,10 +1068,7 @@ impl McpSession {
 
         if let Some(app_handle) = app_handle_opt.as_ref() {
             let cmd_lower = command.to_lowercase();
-            let is_stdio_node_launcher = cmd_lower == "npx"
-                || cmd_lower == "npx.cmd"
-                || cmd_lower == "node"
-                || cmd_lower.contains("tsx");
+            let is_stdio_node_launcher = is_stdio_node_launcher_command(&command);
 
             if is_stdio_node_launcher {
                 crate::app_log!(
@@ -2071,6 +2084,15 @@ mod tests {
         };
 
         assert!(McpSession::should_retry_with_initialize(&response));
+    }
+
+    #[test]
+    fn detects_portable_node_executable_as_node_launcher() {
+        assert!(is_stdio_node_launcher_command(r"C:\portable\node\node.exe"));
+        assert!(is_stdio_node_launcher_command("/opt/node/bin/node"));
+        assert!(is_stdio_node_launcher_command("node"));
+        assert!(is_stdio_node_launcher_command("npx.cmd"));
+        assert!(!is_stdio_node_launcher_command(r"C:\tools\mcp-1c-search.exe"));
     }
 
     #[test]

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Database, Link2, Key, ShieldCheck, Activity, CheckCircle2, AlertCircle, Plus, Trash2, Globe, Settings2, Terminal, Cpu, FileText, X, Sparkles, FolderOpen, ChevronDown, Code, Wrench } from 'lucide-react';
 import McpToolsView from '../CodeSidePanel/McpToolsView';
+import { isBuiltinNodeLauncher, normalizeNodePath } from '../../utils/mcpNodePath';
 
 // ── Benchmark Panel ───────────────────────────────────────────────────────────
 
@@ -170,6 +171,7 @@ export interface McpServerStatus {
 
 interface MCPSettingsProps {
     servers: McpServerConfig[];
+    nodePath: string;
     bslEnabled?: boolean;
     onUpdate: (servers: McpServerConfig[]) => void;
 }
@@ -257,7 +259,7 @@ const buildSearchEnv = (
     };
 };
 
-export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps) {
+export function MCPSettings({ servers, nodePath, bslEnabled, onUpdate }: MCPSettingsProps) {
     const [testingId, setTestingId] = useState<string | null>(null);
     const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
     const [statuses, setStatuses] = useState<Record<string, McpServerStatus>>({});
@@ -278,6 +280,7 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
     const [jsonImportError, setJsonImportError] = useState<string | null>(null);
     const [benchmarkResult, setBenchmarkResult] = useState<Record<string, any> | null>(null);
     const [isBenchmarking, setIsBenchmarking] = useState(false);
+    const effectiveNodePath = normalizeNodePath(nodePath);
 
     const addToSearchHistory = (path: string) => {
         if (!path.trim()) return;
@@ -297,9 +300,9 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
 
     // Ensure pre-installed servers exist
     useEffect(() => {
-        // Use npx --yes to auto-install tsx without prompting (cached after first run)
-        const naparnikArgs = ['--yes', 'tsx', 'src/mcp-servers/1c-naparnik.ts'];
-        const metadataArgs = ['--yes', 'tsx', 'src/mcp-servers/1c-metadata.ts'];
+        const naparnikArgs = ['mcp-servers/1c-naparnik.cjs'];
+        const metadataArgs = ['mcp-servers/1c-metadata.cjs'];
+        const helpArgs = ['mcp-servers/1c-help.cjs'];
 
         let updatedServers = [...servers];
         let needsUpdate = false;
@@ -312,17 +315,16 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                 name: '1C:Напарник',
                 enabled: false,
                 transport: 'stdio',
-                command: 'npx',
+                command: effectiveNodePath,
                 args: naparnikArgs,
                 env: { 'ONEC_AI_TOKEN': '' }
             });
             needsUpdate = true;
         } else {
             const srv = updatedServers[naparnikIndex];
-            // Allow both npx and node (backend might migrate to node)
-            const isSupportedCmd = srv.command === 'npx' || srv.command === 'node';
-            if (!isSupportedCmd) {
-                updatedServers[naparnikIndex] = { ...srv, command: 'npx', args: naparnikArgs };
+            const isSupportedCmd = isBuiltinNodeLauncher(srv.command, effectiveNodePath);
+            if (!isSupportedCmd || srv.command !== effectiveNodePath || JSON.stringify(srv.args ?? []) !== JSON.stringify(naparnikArgs)) {
+                updatedServers[naparnikIndex] = { ...srv, command: effectiveNodePath, args: naparnikArgs };
                 needsUpdate = true;
             }
         }
@@ -335,16 +337,16 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                 name: '1C:Метаданные',
                 enabled: false,
                 transport: 'stdio',
-                command: 'npx',
+                command: effectiveNodePath,
                 args: metadataArgs,
                 env: { 'ONEC_METADATA_URL': 'http://localhost/base/hs/mcp', 'ONEC_USERNAME': '', 'ONEC_PASSWORD': '' }
             });
             needsUpdate = true;
         } else {
             const srv = updatedServers[metadataIndex];
-            const isSupportedCmd = srv.command === 'npx' || srv.command === 'node';
-            if (!isSupportedCmd) {
-                updatedServers[metadataIndex] = { ...srv, command: 'npx', args: metadataArgs };
+            const isSupportedCmd = isBuiltinNodeLauncher(srv.command, effectiveNodePath);
+            if (!isSupportedCmd || srv.command !== effectiveNodePath || JSON.stringify(srv.args ?? []) !== JSON.stringify(metadataArgs)) {
+                updatedServers[metadataIndex] = { ...srv, command: effectiveNodePath, args: metadataArgs };
                 needsUpdate = true;
             }
         }
@@ -369,16 +371,16 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
                 name: '1С:Справка',
                 enabled: false,
                 transport: 'stdio',
-                command: 'npx',
-                args: ['--yes', 'tsx', 'src/mcp-servers/1c-help.ts'],
+                command: effectiveNodePath,
+                args: helpArgs,
                 env: { 'ONEC_HELP_PATH': '' },
             });
             needsUpdate = true;
         } else {
             const srv = updatedServers[helpIndex];
-            const isSupportedCmd = srv.command === 'npx' || srv.command === 'node';
-            if (!isSupportedCmd) {
-                updatedServers[helpIndex] = { ...srv, command: 'npx', args: ['--yes', 'tsx', 'src/mcp-servers/1c-help.ts'] };
+            const isSupportedCmd = isBuiltinNodeLauncher(srv.command, effectiveNodePath);
+            if (!isSupportedCmd || srv.command !== effectiveNodePath || JSON.stringify(srv.args ?? []) !== JSON.stringify(helpArgs)) {
+                updatedServers[helpIndex] = { ...srv, command: effectiveNodePath, args: helpArgs };
                 needsUpdate = true;
             }
         }
@@ -438,7 +440,7 @@ export function MCPSettings({ servers, bslEnabled, onUpdate }: MCPSettingsProps)
         if (needsUpdate) {
             onUpdate(updatedServers);
         }
-    }, [servers, onUpdate]);
+    }, [servers, onUpdate, effectiveNodePath]);
 
     const fetchStatuses = async () => {
         try {

@@ -146,6 +146,7 @@ export interface AppSettings {
         auto_download: boolean;
     };
     mcp_servers: McpServerConfig[];
+    node_path: string;
     active_llm_profile: string;
     debug_mode: boolean;
     onboarding_completed?: boolean;

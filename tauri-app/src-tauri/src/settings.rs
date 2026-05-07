@@ -46,6 +46,23 @@ fn default_compress_strategy() -> String {
     "summarize".to_string()
 }
 
+fn default_node_path() -> String {
+    "node".to_string()
+}
+
+fn is_default_node_path(value: &String) -> bool {
+    value.trim().is_empty() || value.trim() == default_node_path()
+}
+
+fn normalize_node_path(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        default_node_path()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 /// Быстрые команды (Slash Commands)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlashCommand {
@@ -271,6 +288,8 @@ impl Default for McpServerConfig {
 pub struct AppSettings {
     pub configurator: ConfiguratorSettings,
     pub bsl_server: BSLServerSettings,
+    #[serde(default = "default_node_path", skip_serializing_if = "is_default_node_path")]
+    pub node_path: String,
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
     pub active_llm_profile: String,
@@ -472,6 +491,85 @@ pub fn clear_runtime_only_settings(settings: &mut AppSettings) -> bool {
     had_binding
 }
 
+fn is_builtin_node_mcp_server(server_id: &str) -> bool {
+    matches!(
+        server_id,
+        "builtin-1c-naparnik" | "builtin-1c-metadata" | "builtin-1c-help"
+    )
+}
+
+fn migrate_builtin_mcp_launchers(settings: &mut AppSettings) -> bool {
+    let mut modified = false;
+    let node_path = normalize_node_path(&settings.node_path);
+
+    if settings.node_path != node_path {
+        settings.node_path = node_path.clone();
+        modified = true;
+    }
+
+    for server in settings.mcp_servers.iter_mut() {
+        if is_builtin_node_mcp_server(&server.id) {
+            let current_cmd = server.command.as_deref().unwrap_or("");
+            if current_cmd != node_path {
+                crate::app_log!(
+                    "[SETTINGS] Migrating builtin server '{}' from '{}' to '{}' launcher",
+                    server.id,
+                    current_cmd,
+                    node_path
+                );
+                server.command = Some(node_path.clone());
+                modified = true;
+            }
+
+            if let Some(args) = &mut server.args {
+                let original_args = args.clone();
+                args.retain(|a| a != "tsx" && a != "--yes" && !a.contains("node_modules"));
+
+                for arg in args.iter_mut() {
+                    if arg.contains("mcp-servers") {
+                        *arg = arg
+                            .replace("src-tauri/", "")
+                            .replace("src/mcp-servers/", "mcp-servers/");
+                    }
+                    if arg.ends_with(".ts") || arg.ends_with(".js") {
+                        *arg = arg.replace(".ts", ".cjs").replace(".js", ".cjs");
+                    }
+                }
+                if args != &original_args {
+                    crate::app_log!(
+                        "[SETTINGS] Migrated builtin server '{}' args to: {:?}",
+                        server.id,
+                        args
+                    );
+                    modified = true;
+                }
+            }
+        } else if server.id == "builtin-1c-search" {
+            let current_cmd = server.command.as_deref().unwrap_or("");
+            if current_cmd != "mcp-1c-search.exe" && !current_cmd.ends_with("mcp-1c-search.exe") {
+                crate::app_log!(
+                    "[SETTINGS] Migrating builtin-1c-search command to 'mcp-1c-search.exe'"
+                );
+                server.command = Some("mcp-1c-search.exe".to_string());
+                server.args = None;
+                modified = true;
+            }
+        } else if let Some(cmd) = &server.command {
+            if cmd.contains("node_modules") {
+                crate::app_log!(
+                    "[DEBUG] Migrating stale command '{}' to 'npx' for MCP server '{}'",
+                    cmd,
+                    server.id
+                );
+                server.command = Some("npx".to_string());
+                modified = true;
+            }
+        }
+    }
+
+    modified
+}
+
 /// Get the settings directory path
 pub fn get_settings_dir() -> PathBuf {
     // Use data_local_dir instead of config_dir to avoid UNC paths on terminal servers
@@ -527,73 +625,8 @@ pub fn load_settings() -> AppSettings {
         }
     }
 
-    // Migration: Force high-performance node launcher for built-in MCP servers
-    for server in settings.mcp_servers.iter_mut() {
-        if server.id == "builtin-1c-naparnik"
-            || server.id == "builtin-1c-metadata"
-            || server.id == "builtin-1c-help"
-        {
-            let current_cmd = server.command.as_deref().unwrap_or("");
-            if current_cmd != "node" {
-                crate::app_log!(
-                    "[SETTINGS] Migrating builtin server '{}' from '{}' to 'node' launcher",
-                    server.id,
-                    current_cmd
-                );
-                server.command = Some("node".to_string());
-                modified = true;
-            }
-
-            if let Some(args) = &mut server.args {
-                let original_args = args.clone();
-                // Filter out tsx/npx specific artifacts
-                args.retain(|a| a != "tsx" && a != "--yes" && !a.contains("node_modules"));
-
-                for arg in args.iter_mut() {
-                    // Fix paths: we want 'mcp-servers/name.cjs' relative to src-tauri
-                    if arg.contains("mcp-servers") {
-                        *arg = arg
-                            .replace("src-tauri/", "")
-                            .replace("src/mcp-servers/", "mcp-servers/");
-                    }
-                    if arg.ends_with(".ts") || arg.ends_with(".js") {
-                        *arg = arg.replace(".ts", ".cjs").replace(".js", ".cjs");
-                    }
-                }
-                if args != &original_args {
-                    crate::app_log!(
-                        "[SETTINGS] Migrated builtin server '{}' args to: {:?}",
-                        server.id,
-                        args
-                    );
-                    modified = true;
-                }
-            }
-        } else if server.id == "builtin-1c-search" {
-            // 1С:Поиск — Rust binary, command must stay as mcp-1c-search.exe (NOT node)
-            let current_cmd = server.command.as_deref().unwrap_or("");
-            if current_cmd != "mcp-1c-search.exe" && !current_cmd.ends_with("mcp-1c-search.exe") {
-                crate::app_log!(
-                    "[SETTINGS] Migrating builtin-1c-search command to 'mcp-1c-search.exe'"
-                );
-                server.command = Some("mcp-1c-search.exe".to_string());
-                server.args = None;
-                modified = true;
-            }
-        } else {
-            // Generic migration for other servers if they have node_modules in command
-            if let Some(cmd) = &server.command {
-                if cmd.contains("node_modules") {
-                    crate::app_log!(
-                        "[DEBUG] Migrating stale command '{}' to 'npx' for MCP server '{}'",
-                        cmd,
-                        server.id
-                    );
-                    server.command = Some("npx".to_string());
-                    modified = true;
-                }
-            }
-        }
+    if migrate_builtin_mcp_launchers(&mut settings) {
+        modified = true;
     }
 
     // Migration: upgrade old window_title_pattern to include "1C:Enterprise" for English UI
@@ -770,5 +803,54 @@ mod tests {
         assert!(!serialized.contains("selected_window_title"));
         assert!(!serialized.contains("selected_config_name"));
         assert!(!serialized.contains("window_title_pattern"));
+    }
+
+    #[test]
+    fn legacy_settings_deserialize_node_path_to_default_node() {
+        let mut json = serde_json::to_value(AppSettings::default())
+            .expect("default settings should serialize to json");
+        json.as_object_mut()
+            .expect("settings should be an object")
+            .remove("node_path");
+
+        let settings: AppSettings =
+            serde_json::from_value(json).expect("legacy settings should deserialize");
+
+        assert_eq!(settings.node_path, "node");
+    }
+
+    #[test]
+    fn builtin_mcp_node_migration_uses_custom_node_path() {
+        let custom_node = r"C:\portable\node\node.exe".to_string();
+        let mut settings = AppSettings {
+            node_path: custom_node.clone(),
+            mcp_servers: vec![McpServerConfig {
+                id: "builtin-1c-naparnik".to_string(),
+                name: "1C:Naparnik".to_string(),
+                enabled: false,
+                transport: McpTransport::Stdio,
+                url: None,
+                login: None,
+                password: None,
+                headers: None,
+                command: Some("node".to_string()),
+                args: Some(vec![
+                    "--yes".to_string(),
+                    "tsx".to_string(),
+                    "src/mcp-servers/1c-naparnik.ts".to_string(),
+                ]),
+                env: None,
+            }],
+            ..AppSettings::default()
+        };
+
+        assert!(migrate_builtin_mcp_launchers(&mut settings));
+        let server = &settings.mcp_servers[0];
+
+        assert_eq!(server.command.as_deref(), Some(custom_node.as_str()));
+        assert_eq!(
+            server.args,
+            Some(vec!["mcp-servers/1c-naparnik.cjs".to_string()])
+        );
     }
 }
