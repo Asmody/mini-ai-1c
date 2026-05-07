@@ -716,10 +716,23 @@ impl McpSession {
 
     fn normalize_spawn_path(path: &std::path::Path) -> String {
         let path_str = path.to_string_lossy().to_string();
-        path_str
-            .strip_prefix(r"\\?\")
-            .unwrap_or(&path_str)
-            .to_string()
+        Self::normalize_extended_path(&path_str)
+    }
+
+    /// Converts a Windows extended-length path (`\\?\…`) into a standard path
+    /// understandable by external processes (Node.js, child .exe).
+    ///
+    /// `std::fs::canonicalize` on Windows returns the extended form. Stripping
+    /// only `\\?\` is wrong for UNC paths: `\\?\UNC\srv\share\foo` becomes
+    /// `UNC\srv\share\foo`, which Node.js resolves relative to cwd (issue #165).
+    fn normalize_extended_path(s: &str) -> String {
+        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{}", rest)
+        } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+            rest.to_string()
+        } else {
+            s.to_string()
+        }
     }
 
     #[cfg_attr(debug_assertions, allow(dead_code))]
@@ -1099,11 +1112,7 @@ impl McpSession {
                                 .resolve(&js_subpath, tauri::path::BaseDirectory::Resource)
                             {
                                 if path.exists() {
-                                    let path_str = path.to_string_lossy().to_string();
-                                    *arg = path_str
-                                        .strip_prefix(r"\\?\")
-                                        .unwrap_or(&path_str)
-                                        .to_string();
+                                    *arg = Self::normalize_spawn_path(&path);
                                     crate::app_log!("[MCP] Resolved to MSI resource: {}", arg);
                                     resolved = true;
                                 }
@@ -1146,11 +1155,7 @@ impl McpSession {
                                 .join(&js_filename);
                             if dev_path.exists() {
                                 if let Ok(abs) = std::fs::canonicalize(&dev_path) {
-                                    let path_str = abs.to_string_lossy().to_string();
-                                    *arg = path_str
-                                        .strip_prefix(r"\\?\")
-                                        .unwrap_or(&path_str)
-                                        .to_string();
+                                    *arg = Self::normalize_spawn_path(&abs);
                                     crate::app_log!(
                                         "[MCP] Resolved to Dev-relative resource: {}",
                                         arg
@@ -1162,11 +1167,7 @@ impl McpSession {
                                     std::path::PathBuf::from("mcp-servers").join(&js_filename);
                                 if dev_path2.exists() {
                                     if let Ok(abs) = std::fs::canonicalize(&dev_path2) {
-                                        let path_str = abs.to_string_lossy().to_string();
-                                        *arg = path_str
-                                            .strip_prefix(r"\\?\")
-                                            .unwrap_or(&path_str)
-                                            .to_string();
+                                        *arg = Self::normalize_spawn_path(&abs);
                                         crate::app_log!(
                                             "[MCP] Resolved to Dev-relative resource: {}",
                                             arg
@@ -1202,11 +1203,7 @@ impl McpSession {
                         .resolve(&exe_subpath, tauri::path::BaseDirectory::Resource)
                     {
                         if path.exists() {
-                            let path_str = path.to_string_lossy().to_string();
-                            command = path_str
-                                .strip_prefix(r"\\?\")
-                                .unwrap_or(&path_str)
-                                .to_string();
+                            command = Self::normalize_spawn_path(&path);
                             crate::app_log!("[MCP] Resolved .exe to resource: {}", command);
                             exe_resolved = true;
                         }
@@ -1245,11 +1242,7 @@ impl McpSession {
                         std::path::PathBuf::from("src-tauri/mcp-servers").join(&exe_filename);
                     if dev_path.exists() {
                         if let Ok(abs) = std::fs::canonicalize(&dev_path) {
-                            let path_str = abs.to_string_lossy().to_string();
-                            command = path_str
-                                .strip_prefix(r"\\?\")
-                                .unwrap_or(&path_str)
-                                .to_string();
+                            command = Self::normalize_spawn_path(&abs);
                             crate::app_log!("[MCP] Resolved .exe Dev-relative: {}", command);
                             exe_resolved = true;
                         }
@@ -1258,11 +1251,7 @@ impl McpSession {
                         let dev_path2 = std::path::PathBuf::from("mcp-servers").join(&exe_filename);
                         if dev_path2.exists() {
                             if let Ok(abs) = std::fs::canonicalize(&dev_path2) {
-                                let path_str = abs.to_string_lossy().to_string();
-                                command = path_str
-                                    .strip_prefix(r"\\?\")
-                                    .unwrap_or(&path_str)
-                                    .to_string();
+                                command = Self::normalize_spawn_path(&abs);
                                 crate::app_log!("[MCP] Resolved .exe Dev-relative: {}", command);
                                 exe_resolved = true;
                             }
@@ -2209,5 +2198,36 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&base_dir);
+    }
+
+    #[test]
+    fn normalize_extended_path_preserves_unc_share() {
+        // \\?\UNC\server\share\dir\file.cjs must become \\server\share\dir\file.cjs,
+        // not the relative-looking UNC\server\share\... that Node.js misinterprets
+        // as cwd-relative (issue #165).
+        assert_eq!(
+            McpSession::normalize_extended_path(r"\\?\UNC\server\share\mcp-servers\1c-naparnik.cjs"),
+            r"\\server\share\mcp-servers\1c-naparnik.cjs"
+        );
+    }
+
+    #[test]
+    fn normalize_extended_path_strips_local_extended_prefix() {
+        assert_eq!(
+            McpSession::normalize_extended_path(r"\\?\C:\Users\foo\bar.cjs"),
+            r"C:\Users\foo\bar.cjs"
+        );
+    }
+
+    #[test]
+    fn normalize_extended_path_passes_through_regular_paths() {
+        assert_eq!(
+            McpSession::normalize_extended_path(r"C:\Users\foo\bar.cjs"),
+            r"C:\Users\foo\bar.cjs"
+        );
+        assert_eq!(
+            McpSession::normalize_extended_path(r"\\server\share\foo.cjs"),
+            r"\\server\share\foo.cjs"
+        );
     }
 }
