@@ -7,6 +7,7 @@ import { messageQueueService, QueuedMessage } from '../services/MessageQueueServ
 import { useSettings } from './SettingsContext';
 import { useProfiles } from './ProfileContext';
 import { useChatSessions, ChatSession } from '../hooks/useChatSessions';
+import { clampPayloadToBudget } from '../utils/contextPayload';
 
 export type { ChatSession };
 
@@ -701,8 +702,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
+        let payloadMessages = buildPayloadMessages(payloadSourceMessages, userMessage.id, contextPayload);
+
+        if (strategy !== 'disabled') {
+            const currentPayloadMessage = payloadMessages[payloadMessages.length - 1];
+            if (currentPayloadMessage?.role === 'user') {
+                const clamped = clampPayloadToBudget(payloadMessages, currentPayloadMessage, maxTokens);
+                payloadMessages = clamped.messages;
+                if (clamped.wasClamped && !indicator) {
+                    indicator = {
+                        anchorMessageId: userMessage.id,
+                        label: 'Контекст сжат',
+                    };
+                }
+            }
+        }
+
         return {
-            payloadMessages: buildPayloadMessages(payloadSourceMessages, userMessage.id, contextPayload),
+            payloadMessages,
             indicator,
         };
     }, [settings]);
