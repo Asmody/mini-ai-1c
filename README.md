@@ -10,15 +10,15 @@
 <!-- news:end -->
 
 <!-- release-news:start -->
-> **📋 Последний релиз: версия 1.2.6** — 2 мая 2026
+> **📋 Последний релиз: версия 1.2.7** — 8 мая 2026
 >
-> - **Ollama Cloud как отдельный провайдер LLM** — подключение к ollama.com через API-ключ, контексты до 1M токенов, 120s chunk timeout для thinking-моделей (qwen3-coder:480b, kimi-k2-thinking, glm-4.7)
-> - **1С:Напарник: локальное применение SEARCH/REPLACE-диффов** + MCP-bridge для облачного Напарника
-> - **MiniMax M2**: распознавание альтернативной diff-схемы и снятие 120s обрыва длинных стримов ([#156](https://github.com/hawkxtreme/mini-ai-1c/issues/156))
-> - **EditorBridge**: per-user pipe — больше нет «Access is denied» на терминальных серверах ([#141](https://github.com/hawkxtreme/mini-ai-1c/issues/141))
-> - **UI**: читаемый текст системных предупреждений в светлой теме ([#159](https://github.com/hawkxtreme/mini-ai-1c/issues/159)), лимит сохранённых чатов поднят до 50
+> - **1С:Поиск**: несколько конфигураций, поддержка расширений и более подробные статусы индексации ([#155](https://github.com/hawkxtreme/mini-ai-1c/issues/155), [#123](https://github.com/hawkxtreme/mini-ai-1c/issues/123), [#117](https://github.com/hawkxtreme/mini-ai-1c/issues/117))
+> - **Node.js для MCP**: настраиваемый путь к Node.js и корректный запуск portable из сетевых UNC-папок ([#151](https://github.com/hawkxtreme/mini-ai-1c/issues/151), [#165](https://github.com/hawkxtreme/mini-ai-1c/issues/165))
+> - **LLM-настройки**: ручной `MAX TOKENS` больше не сбрасывается при переключении моделей ([#164](https://github.com/hawkxtreme/mini-ai-1c/issues/164))
+> - **1С:Напарник**: исправлена ошибка `422 Unprocessable Entity` при недоступных локальных tool calls ([#166](https://github.com/hawkxtreme/mini-ai-1c/issues/166))
+> - **Чат**: большой текущий контекст автоматически сжимается перед отправкой в модель
 >
-> [Подробнее о релизе →](https://github.com/hawkxtreme/mini-ai-1c/releases/tag/v1.2.6) · [Все релизы →](https://github.com/hawkxtreme/mini-ai-1c/releases)
+> [Подробнее о релизе →](https://github.com/hawkxtreme/mini-ai-1c/releases/tag/v1.2.7) · [Все релизы →](https://github.com/hawkxtreme/mini-ai-1c/releases)
 <!-- release-news:end -->
 
 > 🐛 **Нашли баг или есть вопрос?** Прочитайте [как правильно сообщить о проблеме →](how-to-report-an-issue.md) — там пошагово: что написать, как снять логи приложения и MCP-логи, и готовый шаблон issue.
