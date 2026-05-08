@@ -17,10 +17,6 @@ export interface LLMProfile {
     stream_timeout_secs?: number;
     context_compress_strategy?: 'disabled' | 'sliding_window' | 'summarize';
     max_context_messages?: number;
-    /** Не передавать `tools` в payload. Включай для моделей с битым jinja-шаблоном
-     * (например Gemma 4 26B APEX в LM Studio): шаблон тихо проваливает рендеринг
-     * tools и LM Studio возвращает пустой стрим вместо ошибки. */
-    disable_native_tools?: boolean;
     provider_subtype?: 'cli';
     cli_info?: CliProviderInfo;
 }

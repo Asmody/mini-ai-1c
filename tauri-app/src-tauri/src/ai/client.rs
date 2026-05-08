@@ -296,18 +296,7 @@ pub async fn stream_chat_completion(
     // to avoid smaller models rephrasing instead of responding.
     let tools_info = get_available_tools().await;
     let tools: Vec<Tool> = tools_info.iter().map(|i| i.tool.clone()).collect();
-    let native_tools_disabled = profile.disable_native_tools.unwrap_or(false);
-    let tools_opt = if native_tools_disabled || tools.is_empty() {
-        None
-    } else {
-        Some(tools)
-    };
-    if native_tools_disabled {
-        crate::app_log!(
-            "[AI] Native tools disabled for profile '{}' — sending request without `tools` field",
-            profile.name
-        );
-    }
+    let tools_opt = if tools.is_empty() { None } else { Some(tools) };
 
     let system_prompt = if is_local_provider(Some(&profile.provider)) {
         get_lightweight_system_prompt(&tools_info, &messages)

@@ -1026,8 +1026,8 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
 
                             {/* Disable streaming toggle — Ollama/LMStudio */}
                             {(editForm.provider === 'Ollama' || editForm.provider === 'LMStudio') && (
-                                <div className="flex items-center justify-between pt-3 px-1 gap-3">
-                                    <div className="min-w-0">
+                                <div className="flex items-center justify-between pt-3 px-1">
+                                    <div>
                                         <span className="text-xs text-zinc-400 font-medium">Отключить потоковый вывод</span>
                                         <p className="text-[10px] text-zinc-600 mt-0.5">
                                             Ответ появится целиком после генерации — полезно на медленных ПК
@@ -1036,36 +1036,17 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                     <button
                                         type="button"
                                         onClick={() => setEditForm({ ...editForm, disable_streaming: !editForm.disable_streaming })}
-                                        className={`relative shrink-0 w-9 h-5 rounded-full transition-colors focus:outline-none ${editForm.disable_streaming ? 'bg-blue-500' : 'bg-zinc-700'}`}
+                                        className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none ${editForm.disable_streaming ? 'bg-blue-500' : 'bg-zinc-700'}`}
                                     >
                                         <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editForm.disable_streaming ? 'translate-x-4' : 'translate-x-0'}`} />
                                     </button>
                                 </div>
                             )}
 
-                            {/* Disable native tools toggle — local providers (Ollama/LMStudio/Custom) */}
-                            {(editForm.provider === 'Ollama' || editForm.provider === 'LMStudio' || editForm.provider === 'Custom') && (
-                                <div className="flex items-center justify-between pt-3 px-1 gap-3">
-                                    <div className="min-w-0">
-                                        <span className="text-xs text-zinc-400 font-medium">Отключить нативные инструменты (tools)</span>
-                                        <p className="text-[10px] text-zinc-600 mt-0.5">
-                                            Не передавать поле <code>tools</code> в запрос. Включи, если модель отвечает пустым стримом.
-                                        </p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setEditForm({ ...editForm, disable_native_tools: !editForm.disable_native_tools })}
-                                        className={`relative shrink-0 w-9 h-5 rounded-full transition-colors focus:outline-none ${editForm.disable_native_tools ? 'bg-blue-500' : 'bg-zinc-700'}`}
-                                    >
-                                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editForm.disable_native_tools ? 'translate-x-4' : 'translate-x-0'}`} />
-                                    </button>
-                                </div>
-                            )}
-
                             {/* Stream timeout — Ollama/LMStudio */}
                             {(editForm.provider === 'Ollama' || editForm.provider === 'LMStudio') && (
-                                <div className="flex items-center justify-between pt-3 px-1 gap-3">
-                                    <div className="min-w-0">
+                                <div className="flex items-center justify-between pt-3 px-1">
+                                    <div>
                                         <span className="text-xs text-zinc-400 font-medium">Таймаут стрима (сек)</span>
                                         <p className="text-[10px] text-zinc-600 mt-0.5">
                                             Макс. пауза между чанками. По умолч.: 300с для локальных моделей
@@ -1081,15 +1062,15 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                             const v = parseInt(e.target.value);
                                             setEditForm({ ...editForm, stream_timeout_secs: isNaN(v) ? undefined : v });
                                         }}
-                                        className="w-20 shrink-0 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 text-right focus:outline-none focus:border-zinc-500"
+                                        className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 text-right focus:outline-none focus:border-zinc-500"
                                     />
                                 </div>
                             )}
 
                             {/* Thinking mode toggle — Qwen CLI only */}
                             {editForm.provider === 'QwenCli' && (
-                                <div className="flex items-center justify-between pt-3 px-1 gap-3">
-                                    <div className="min-w-0">
+                                <div className="flex items-center justify-between pt-3 px-1">
+                                    <div>
                                         <span className="text-xs text-zinc-400 font-medium">Режим размышлений</span>
                                         <p className="text-[10px] text-zinc-600 mt-0.5">
                                             enable_thinking · budget 8192 токенов · temp → 1.0 (возврат к настройке при генерации)
@@ -1098,7 +1079,7 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
                                     <button
                                         type="button"
                                         onClick={() => setEditForm({ ...editForm, enable_thinking: !editForm.enable_thinking })}
-                                        className={`relative shrink-0 w-9 h-5 rounded-full transition-colors focus:outline-none ${editForm.enable_thinking ? 'bg-blue-500' : 'bg-zinc-700'}`}
+                                        className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none ${editForm.enable_thinking ? 'bg-blue-500' : 'bg-zinc-700'}`}
                                     >
                                         <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${editForm.enable_thinking ? 'translate-x-4' : 'translate-x-0'}`} />
                                     </button>

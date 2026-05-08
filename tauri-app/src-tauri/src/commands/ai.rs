@@ -657,30 +657,11 @@ pub async fn stream_chat(
                     });
                     continue;
                 } else {
-                    // Model returned empty response twice — likely context too large OR jinja chat
-                    // template silently failed to render `tools` (e.g. Gemma 4 APEX in LM Studio).
+                    // Model returned empty response twice — likely context too large
                     crate::app_log!("[AI] Model returned empty response twice (context ~{}t). Emitting fallback.",
                         api_messages.iter().map(|m| m.content.as_deref().unwrap_or("").len() / 4).sum::<usize>());
-                    let active_profile = crate::llm_profiles::get_active_profile();
-                    let native_tools_active = active_profile
-                        .as_ref()
-                        .map(|p| !p.disable_native_tools.unwrap_or(false))
-                        .unwrap_or(true);
-                    let is_local_provider = active_profile
-                        .as_ref()
-                        .map(|p| matches!(
-                            p.provider,
-                            crate::llm_profiles::LLMProvider::LMStudio
-                                | crate::llm_profiles::LLMProvider::Ollama
-                                | crate::llm_profiles::LLMProvider::Custom
-                        ))
-                        .unwrap_or(false);
-                    let fallback = if native_tools_active && is_local_provider {
-                        "\n\n> **[Система]** Модель вернула пустой ответ. Возможные причины: (1) jinja-шаблон модели не поддерживает поле `tools` (типичная проблема Gemma 4 APEX и подобных моделей в LM Studio) — попробуйте включить «Отключить нативные инструменты» в настройках профиля; (2) контекст диалога слишком велик — начните новый чат или сократите историю."
-                    } else {
-                        "\n\n> **[Система]** Модель не смогла сформировать ответ (вероятно, контекст диалога слишком велик). Попробуйте начать новый чат или сократить историю."
-                    };
-                    let _ = task_app_handle.emit("chat-chunk", fallback);
+                    let _ = task_app_handle.emit("chat-chunk",
+                        "\n\n> **[Система]** Модель не смогла сформировать ответ (вероятно, контекст диалога слишком велик). Попробуйте начать новый чат или сократить историю.");
                     break;
                 }
             }
