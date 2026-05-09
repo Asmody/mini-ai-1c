@@ -28,6 +28,7 @@ import { ContextUsageBar } from './ContextUsageBar';
 import { applySelectiveFixScopeInstructions } from '../../utils/fixPromptScope';
 import { formatSyntaxSafeFallbackMessage, isRecoverableSyntaxValidationMessage, salvageSyntaxSafeDiffBlocks } from '../../utils/bslSyntaxGuard';
 import { resolveEffectiveSelectedDiagnostics } from '../../utils/diagnosticsSelection';
+import { getStreamingAutoScrollTop, isChatNearBottom } from '../../utils/chatAutoScroll';
 
 interface ChatAreaProps {
     originalCode?: string;
@@ -697,8 +698,7 @@ export function ChatArea({
     // Обработчик скролла — отслеживаем ручную прокрутку вверх
     const handleScroll = () => {
         if (scrollRef.current) {
-            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-            const isAtBottom = scrollHeight - scrollTop <= clientHeight + 100;
+            const isAtBottom = isChatNearBottom(scrollRef.current);
             wasAtBottom.current = isAtBottom;
             // Пользователь прокрутил вверх — останавливаем автоскролл
             if (!isAtBottom && autoScrollRaf.current) {
@@ -736,10 +736,9 @@ export function ChatArea({
                 autoScrollRaf.current = null;
                 return;
             }
-            const maxScroll = el.scrollHeight - el.clientHeight;
-            const diff = maxScroll - el.scrollTop;
-            if (diff > 1) {
-                el.scrollTop += Math.ceil(Math.max(3, diff * 0.2));
+            const nextScrollTop = getStreamingAutoScrollTop(el);
+            if (nextScrollTop !== null && Math.abs(nextScrollTop - el.scrollTop) > 1) {
+                el.scrollTop = nextScrollTop;
             }
             autoScrollRaf.current = requestAnimationFrame(tick);
         };
