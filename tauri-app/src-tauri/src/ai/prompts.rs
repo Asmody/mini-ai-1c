@@ -1,6 +1,6 @@
 use super::models::{ApiMessage, ToolInfo};
 use crate::llm_profiles::LLMProvider;
-use crate::settings::{load_settings, PromptBehaviorPreset};
+use crate::settings::{load_settings, CustomPromptsSettings, PromptBehaviorPreset};
 
 /// Константа с инструкциями для diff-формата (Search/Replace)
 pub const DIFF_FORMAT_INSTRUCTIONS: &str = r#"
@@ -108,6 +108,19 @@ pub fn get_lightweight_system_prompt(
     available_tools: &[ToolInfo],
     messages: &[ApiMessage],
 ) -> String {
+    let settings = load_settings();
+    build_lightweight_system_prompt_with_custom_prompts(
+        available_tools,
+        messages,
+        &settings.custom_prompts,
+    )
+}
+
+fn build_lightweight_system_prompt_with_custom_prompts(
+    available_tools: &[ToolInfo],
+    messages: &[ApiMessage],
+    custom_prompts: &CustomPromptsSettings,
+) -> String {
     let target_lang = detect_target_lang(messages);
     let has_code = has_code_context(messages);
 
@@ -145,7 +158,35 @@ pub fn get_lightweight_system_prompt(
         }
     }
 
+    append_custom_prompt_settings(&mut prompt, custom_prompts);
+
     prompt
+}
+
+fn append_custom_prompt_settings(prompt: &mut String, custom: &CustomPromptsSettings) {
+    if !custom.system_prefix.trim().is_empty() {
+        prompt.push_str("\n\n=== ПОЛЬЗОВАТЕЛЬСКИЕ ГЛОБАЛЬНЫЕ НАСТРОЙКИ (OVERRIDE) ===\n");
+        prompt.push_str(&custom.system_prefix);
+    }
+
+    if !custom.on_code_change.trim().is_empty() {
+        prompt.push_str("\n\n=== ПОЛЬЗОВАТЕЛЬСКИЕ ИНСТРУКЦИИ ДЛЯ ИЗМЕНЕНИЯ КОДА ===\n");
+        prompt.push_str(&custom.on_code_change);
+    }
+
+    if !custom.on_code_generate.trim().is_empty() {
+        prompt.push_str("\n\n=== ПОЛЬЗОВАТЕЛЬСКИЕ ИНСТРУКЦИИ ДЛЯ ГЕНЕРАЦИИ КОДА ===\n");
+        prompt.push_str(&custom.on_code_generate);
+    }
+
+    let active_templates: Vec<_> = custom.templates.iter().filter(|t| t.enabled).collect();
+
+    if !active_templates.is_empty() {
+        prompt.push_str("\n\n=== АКТИВНЫЕ ШАБЛОНЫ ===\n");
+        for template in active_templates {
+            prompt.push_str(&format!("- {}\n{}\n", template.name, template.content));
+        }
+    }
 }
 
 /// Get dynamic system prompt based on available tools
@@ -315,29 +356,7 @@ pub fn get_system_prompt(available_tools: &[ToolInfo], messages: &[ApiMessage]) 
         }
     }
 
-    if !custom.system_prefix.is_empty() {
-        prompt.push_str("\n\n=== ПОЛЬЗОВАТЕЛЬСКИЕ ГЛОБАЛЬНЫЕ НАСТРОЙКИ (OVERRIDE) ===\n");
-        prompt.push_str(&custom.system_prefix);
-    }
-
-    if !custom.on_code_change.is_empty() {
-        prompt.push_str("\n\n=== ПОЛЬЗОВАТЕЛЬСКИЕ ИНСТРУКЦИИ ДЛЯ ИЗМЕНЕНИЯ КОДА ===\n");
-        prompt.push_str(&custom.on_code_change);
-    }
-
-    if !custom.on_code_generate.is_empty() {
-        prompt.push_str("\n\n=== ПОЛЬЗОВАТЕЛЬСКИЕ ИНСТРУКЦИИ ДЛЯ ГЕНЕРАЦИИ КОДА ===\n");
-        prompt.push_str(&custom.on_code_generate);
-    }
-
-    let active_templates: Vec<_> = custom.templates.iter().filter(|t| t.enabled).collect();
-
-    if !active_templates.is_empty() {
-        prompt.push_str("\n\n=== АКТИВНЫЕ ШАБЛОНЫ ===\n");
-        for template in active_templates {
-            prompt.push_str(&format!("- {}\n{}\n", template.name, template.content));
-        }
-    }
+    append_custom_prompt_settings(&mut prompt, custom);
 
     if !available_tools.is_empty() {
         prompt.push_str("\n\nВАЖНО: Тебе доступны следующие специализированные инструменты MCP:\n");
@@ -546,6 +565,7 @@ pub fn get_system_prompt(available_tools: &[ToolInfo], messages: &[ApiMessage]) 
 mod tests {
     use super::*;
     use crate::ai::models::{Tool, ToolFunction};
+    use crate::settings::{CustomPromptsSettings, PromptTemplate};
     use serde_json::json;
 
     fn make_user_message(content: &str) -> ApiMessage {
@@ -578,6 +598,55 @@ mod tests {
             },
             server_id: "bsl-ls".to_string(),
         }
+    }
+
+    fn make_custom_prompts_with_templates(templates: Vec<PromptTemplate>) -> CustomPromptsSettings {
+        CustomPromptsSettings {
+            system_prefix: String::new(),
+            on_code_change: String::new(),
+            on_code_generate: String::new(),
+            templates,
+        }
+    }
+
+    #[test]
+    fn lightweight_system_prompt_includes_enabled_custom_templates() {
+        let custom = make_custom_prompts_with_templates(vec![PromptTemplate {
+            id: "issue-160-rule".to_string(),
+            name: "Issue 160 Rule".to_string(),
+            description: "Regression marker".to_string(),
+            content: "ISSUE160_CHECK_BSL_AFTER_EACH_ANSWER".to_string(),
+            enabled: true,
+        }]);
+
+        let prompt = build_lightweight_system_prompt_with_custom_prompts(
+            &[],
+            &[make_user_message("Напиши функцию")],
+            &custom,
+        );
+
+        assert!(prompt.contains("ISSUE160_CHECK_BSL_AFTER_EACH_ANSWER"));
+        assert!(prompt.contains("Issue 160 Rule"));
+    }
+
+    #[test]
+    fn lightweight_system_prompt_skips_disabled_custom_templates() {
+        let custom = make_custom_prompts_with_templates(vec![PromptTemplate {
+            id: "disabled-rule".to_string(),
+            name: "Disabled Rule".to_string(),
+            description: "Should stay out".to_string(),
+            content: "ISSUE160_DISABLED_RULE_SHOULD_NOT_APPEAR".to_string(),
+            enabled: false,
+        }]);
+
+        let prompt = build_lightweight_system_prompt_with_custom_prompts(
+            &[],
+            &[make_user_message("Напиши функцию")],
+            &custom,
+        );
+
+        assert!(!prompt.contains("ISSUE160_DISABLED_RULE_SHOULD_NOT_APPEAR"));
+        assert!(!prompt.contains("Disabled Rule"));
     }
 
     #[test]
