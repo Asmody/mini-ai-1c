@@ -6,6 +6,7 @@ import {
     DEFAULT_SLASH_COMMANDS
 } from '../../types/settings';
 import McpToolsPopover from '../chat/McpToolsPopover';
+import { resolveSlashCommandsForRuntime } from '../../utils/slashCommands';
 
 function TokenCode({ code, colorClass = 'text-blue-400/80 bg-blue-400/5', onSelect }: { code: string, colorClass?: string, onSelect?: (code: string) => void }) {
     const [copied, setCopied] = useState(false);
@@ -43,7 +44,7 @@ export function SlashCommandsTab({ settings, onSettingsChange, onSave, saving }:
     const [mcpPopoverIndex, setMcpPopoverIndex] = useState<number | null>(null);
     const textareaRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
 
-    const slashCommands = settings.slash_commands || DEFAULT_SLASH_COMMANDS;
+    const slashCommands = resolveSlashCommandsForRuntime(settings.slash_commands, DEFAULT_SLASH_COMMANDS);
 
     const toggleExpand = (id: string) => {
         const newExpanded = new Set(expandedIds);
@@ -106,7 +107,7 @@ export function SlashCommandsTab({ settings, onSettingsChange, onSave, saving }:
                     </div>
                     <div>
                         <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-2">Быстрые команды</h2>
-                        <p className="text-[11px] text-zinc-500">Настройка команд, вызываемых через "/" в чате</p>
+                        <p className="text-[11px] text-zinc-500">Настройка команд, вызываемых через "/" в чате и Ctrl + ПКМ в Конфигураторе</p>
                     </div>
                 </div>
                 <button

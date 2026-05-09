@@ -28,6 +28,12 @@ import {
   shouldSyncQuickActionToClickTarget,
 } from '../utils/quickActionContext';
 import { buildDescribePrompt } from '../utils/quickActionPrompts';
+import {
+  buildPromptFromSlashCommandTemplate,
+  findSlashCommandById,
+  resolveSlashCommandsForRuntime,
+} from '../utils/slashCommands';
+import { DEFAULT_SLASH_COMMANDS, type AppSettings } from '../types/settings';
 
 interface QuickActionEvent {
   action: QuickActionAction;
@@ -65,6 +71,43 @@ interface OverlayApplyEvent {
 type ResultType = 'comment' | 'diff' | 'explain_only';
 type WriteIntent = QuickActionWriteIntent;
 type CaptureScope = QuickActionCaptureScope;
+
+const QUICK_ACTION_COMMAND_IDS = {
+  describe: 'desc',
+  elaborate: 'elaborate',
+  fix: 'fix',
+  explain: 'explain',
+  review: 'review',
+} as const;
+
+function buildSettingsBackedQuickActionPrompt(
+  action: string,
+  settings: AppSettings | null | undefined,
+  values: {
+    code: string;
+    query?: string | null;
+    diagnostics?: string | null;
+  },
+  options: { customOnly?: boolean } = {},
+): string | null {
+  const commandId = QUICK_ACTION_COMMAND_IDS[action as keyof typeof QUICK_ACTION_COMMAND_IDS];
+  if (!commandId) {
+    return null;
+  }
+
+  const commands = resolveSlashCommandsForRuntime(settings?.slash_commands, DEFAULT_SLASH_COMMANDS);
+  const command = findSlashCommandById(commands, commandId);
+  if (!command?.template) {
+    return null;
+  }
+
+  const defaultTemplate = DEFAULT_SLASH_COMMANDS.find((item) => item.id === commandId)?.template;
+  if (options.customOnly && command.template === defaultTemplate) {
+    return null;
+  }
+
+  return buildPromptFromSlashCommandTemplate(command.template, values);
+}
 
 
 interface OverlayStateUpdate {
@@ -448,7 +491,18 @@ function buildElaborateDirectPrompt(
   code: string,
   task: string | null,
   canDeclareMethod: boolean,
+  settings?: AppSettings | null,
 ): string {
+  const settingsPrompt = buildSettingsBackedQuickActionPrompt(
+    'elaborate',
+    settings,
+    { code, query: task ?? '' },
+    { customOnly: true },
+  );
+  if (settingsPrompt) {
+    return settingsPrompt;
+  }
+
   const taskLine = task ? `Задача: ${task}` : 'Улучши или доработай код';
   if (canDeclareMethod && !code.trim()) {
     return `Ты — опытный 1С-разработчик. ${taskLine}
@@ -475,12 +529,13 @@ async function elaborateDirectlyToConfigurator(args: {
   confHwnd: number;
   capture: CaptureResult;
   task: string | null;
+  settings?: AppSettings | null;
   isStaleRequest: () => boolean;
   targetX: number | null;
   targetY: number | null;
   targetChildHwnd: number | null;
 }): Promise<void> {
-  const { confHwnd, capture, task, isStaleRequest, targetX, targetY, targetChildHwnd } = args;
+  const { confHwnd, capture, task, settings, isStaleRequest, targetX, targetY, targetChildHwnd } = args;
 
   // Get BSL insertion context for smart write strategy
   let insCtx: InsertionContext | null = null;
@@ -494,7 +549,7 @@ async function elaborateDirectlyToConfigurator(args: {
   if (isStaleRequest()) return;
 
   const canDeclare = insCtx?.can_declare_method ?? false;
-  const prompt = buildElaborateDirectPrompt(capture.promptCode, task, canDeclare);
+  const prompt = buildElaborateDirectPrompt(capture.promptCode, task, canDeclare, settings);
 
   // Call AI (with timeout — если quick_chat_invoke не ответил за 90с, показываем ошибку в оверлее)
   const rawResult = await Promise.race([
@@ -775,6 +830,7 @@ export function useQuickActions() {
               confHwnd,
               capture,
               task: task?.trim() || null,
+              settings,
               isStaleRequest,
               targetX: targetX ?? null,
               targetY: targetY ?? null,
@@ -802,7 +858,7 @@ export function useQuickActions() {
           return;
         }
 
-        const prompt = buildPrompt(action, capture.promptCode, task);
+        const prompt = buildPrompt(action, capture.promptCode, task, undefined, settings);
         const rawResult = await invoke<string>('quick_chat_invoke', { prompt });
         const safeResult = decodeHtmlEntities(rawResult);
         if (isStaleRequest()) return;
@@ -1000,7 +1056,18 @@ function buildPrompt(
   code: string,
   task?: string,
   diagnostics?: string,
+  settings?: AppSettings | null,
 ): string {
+  const settingsPrompt = buildSettingsBackedQuickActionPrompt(
+    action,
+    settings,
+    { code, query: task ?? '', diagnostics: diagnostics ?? '' },
+    { customOnly: true },
+  );
+  if (settingsPrompt) {
+    return settingsPrompt;
+  }
+
   if (action === 'describe') {
     return buildDescribePrompt(code);
   }
