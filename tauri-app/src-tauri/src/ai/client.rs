@@ -576,7 +576,7 @@ pub async fn stream_chat_completion(
         profile.provider,
         LLMProvider::Ollama | LLMProvider::LMStudio
     );
-    let mut client_builder = reqwest::Client::builder();
+    let mut client_builder = crate::http_client::http_client_builder()?;
     if !is_local {
         client_builder = client_builder
             .connect_timeout(std::time::Duration::from_secs(30))
@@ -1524,7 +1524,7 @@ pub async fn fetch_models(
         format!("{}/models", base_url.trim_end_matches('/'))
     };
 
-    let client = reqwest::Client::new();
+    let client = crate::http_client::build_http_client()?;
     let mut builder = client.get(&url);
     builder = builder.header(CONTENT_TYPE, "application/json");
 

@@ -14,6 +14,7 @@ mod editor_bridge;
 #[cfg(windows)]
 mod editor_bridge_installer;
 mod history_manager;
+mod http_client;
 mod job_guard;
 mod llm;
 mod llm_profiles;

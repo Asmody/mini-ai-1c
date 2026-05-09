@@ -115,6 +115,18 @@ export interface McpServerConfig {
     env?: Record<string, string> | null;
 }
 
+export type ProxyMode = 'system' | 'disabled' | 'custom';
+export type ProxyProtocol = 'http' | 'socks5';
+
+export interface ProxySettings {
+    mode: ProxyMode;
+    protocol: ProxyProtocol;
+    host: string;
+    port?: number | null;
+    username: string;
+    password: string;
+}
+
 export interface SlashCommand {
     id: string;
     command: string;
@@ -147,6 +159,7 @@ export interface AppSettings {
     };
     mcp_servers: McpServerConfig[];
     node_path: string;
+    proxy?: ProxySettings;
     active_llm_profile: string;
     debug_mode: boolean;
     onboarding_completed?: boolean;
@@ -168,6 +181,15 @@ export interface BslDiagnosticItem {
     message: string;
     suggestion?: string;
 }
+
+export const DEFAULT_PROXY_SETTINGS: ProxySettings = {
+    mode: 'system',
+    protocol: 'http',
+    host: '',
+    port: null,
+    username: '',
+    password: ''
+};
 
 // Значения по умолчанию для новых настроек
 export const DEFAULT_ADDITION_MARKER_TEMPLATE = "// Доработка START (Добавление) - {datetime}\n{newCode}\n// Доработка END";

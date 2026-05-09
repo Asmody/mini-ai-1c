@@ -239,6 +239,82 @@ impl Default for BSLServerSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyMode {
+    System,
+    Disabled,
+    Custom,
+}
+
+impl Default for ProxyMode {
+    fn default() -> Self {
+        Self::System
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyProtocol {
+    Http,
+    Socks5,
+}
+
+impl Default for ProxyProtocol {
+    fn default() -> Self {
+        Self::Http
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProxySettings {
+    #[serde(default)]
+    pub mode: ProxyMode,
+    #[serde(default)]
+    pub protocol: ProxyProtocol,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub port: Option<u16>,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+}
+
+impl Default for ProxySettings {
+    fn default() -> Self {
+        Self {
+            mode: ProxyMode::System,
+            protocol: ProxyProtocol::Http,
+            host: String::new(),
+            port: None,
+            username: String::new(),
+            password: String::new(),
+        }
+    }
+}
+
+impl std::fmt::Debug for ProxySettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxySettings")
+            .field("mode", &self.mode)
+            .field("protocol", &self.protocol)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field(
+                "password",
+                &if self.password.is_empty() {
+                    ""
+                } else {
+                    "<redacted>"
+                },
+            )
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum McpTransport {
@@ -288,8 +364,13 @@ impl Default for McpServerConfig {
 pub struct AppSettings {
     pub configurator: ConfiguratorSettings,
     pub bsl_server: BSLServerSettings,
-    #[serde(default = "default_node_path", skip_serializing_if = "is_default_node_path")]
+    #[serde(
+        default = "default_node_path",
+        skip_serializing_if = "is_default_node_path"
+    )]
     pub node_path: String,
+    #[serde(default)]
+    pub proxy: ProxySettings,
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
     pub active_llm_profile: String,
@@ -817,6 +898,49 @@ mod tests {
             serde_json::from_value(json).expect("legacy settings should deserialize");
 
         assert_eq!(settings.node_path, "node");
+    }
+
+    #[test]
+    fn default_proxy_settings_use_system_mode() {
+        let proxy = ProxySettings::default();
+
+        assert_eq!(proxy.mode, ProxyMode::System);
+        assert_eq!(proxy.protocol, ProxyProtocol::Http);
+        assert_eq!(proxy.host, "");
+        assert_eq!(proxy.port, None);
+    }
+
+    #[test]
+    fn legacy_settings_deserialize_proxy_to_default_system() {
+        let mut json = serde_json::to_value(AppSettings::default())
+            .expect("default settings should serialize to json");
+        json.as_object_mut()
+            .expect("settings should be an object")
+            .remove("proxy");
+
+        let settings: AppSettings =
+            serde_json::from_value(json).expect("legacy settings should deserialize");
+
+        assert_eq!(settings.proxy.mode, ProxyMode::System);
+        assert_eq!(settings.proxy.protocol, ProxyProtocol::Http);
+    }
+
+    #[test]
+    fn proxy_settings_debug_does_not_expose_password() {
+        let proxy = ProxySettings {
+            mode: ProxyMode::Custom,
+            protocol: ProxyProtocol::Http,
+            host: "proxy.corp.local".to_string(),
+            port: Some(8080),
+            username: "user".to_string(),
+            password: "very-secret-proxy-password".to_string(),
+        };
+
+        let debug = format!("{:?}", proxy);
+
+        assert!(debug.contains("proxy.corp.local"));
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains("very-secret-proxy-password"));
     }
 
     #[test]

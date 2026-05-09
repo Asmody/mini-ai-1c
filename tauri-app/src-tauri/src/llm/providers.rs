@@ -83,7 +83,7 @@ async fn fetch_minimax_models(base_url: &str, api_key: &str) -> Result<Vec<Model
         return Ok(static_minimax_models());
     }
 
-    let client = Client::new();
+    let client = crate::http_client::build_http_client()?;
     let trimmed = base_url.trim_end_matches('/');
     let url = if trimmed.ends_with("/v1") {
         format!("{}/models", trimmed)
@@ -289,7 +289,7 @@ pub async fn fetch_models_from_api(
         ));
     }
 
-    let client = Client::new();
+    let client = crate::http_client::build_http_client()?;
     let trimmed_base = base_url.trim_end_matches('/');
 
     let url = if trimmed_base.ends_with("/v1") {
@@ -551,7 +551,7 @@ async fn enrich_lmstudio_context_windows(client: &Client, lms_base: &str, models
 }
 
 pub async fn fetch_registry() -> Result<RegistryData, String> {
-    let client = Client::new();
+    let client = crate::http_client::build_http_client()?;
     let resp = client
         .get(REGISTRY_URL)
         .send()

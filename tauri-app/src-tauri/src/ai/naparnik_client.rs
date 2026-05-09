@@ -122,7 +122,7 @@ struct ToolResultRequest {
 // ─── HTTP Helpers ─────────────────────────────────────────────────────────────
 
 fn build_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    crate::http_client::http_client_builder()?
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))
