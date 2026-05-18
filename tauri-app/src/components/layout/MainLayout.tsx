@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useDeferredValue, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { getVersion } from '@tauri-apps/api/app';
@@ -75,6 +75,8 @@ export function MainLayout() {
         loadedContextCode,
         isContextSelection,
     } = codeSession;
+    const deferredModifiedCode = useDeferredValue(modifiedCode);
+    const getLatestWorkingCode = useCallback(() => codeSessionRef.current.workingCode, [codeSessionRef]);
 
     // useMemo + try/catch защищает от ошибки "Cannot read properties of undefined (reading 'metadata')"
     // которая возникает если Tauri IPC не инициализирован (первый рендер / dev-режим браузера)
@@ -498,9 +500,10 @@ export function MainLayout() {
                     <div className={`flex flex-1 overflow-hidden transition-all duration-300 ${viewMode === 'code' ? 'hidden' : 'opacity-100'}`}>
                         <ChatArea
                             originalCode={uiBaselineCode}
-                            modifiedCode={modifiedCode}
+                            modifiedCode={deferredModifiedCode}
                             loadedContextCode={loadedContextCode}
                             isContextSelection={isContextSelection}
+                            getLatestWorkingCode={getLatestWorkingCode}
                             onClearContext={clearContext}
                             onPrepareDiffBase={syncBaseline}
                             onApplyCode={handleChatApplyCode}
