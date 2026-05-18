@@ -1069,8 +1069,13 @@ export function getApplicableDiffContent(originalCode: string, content: string):
         return null;
     }
 
-    const diffContent = buildFullCodeReplacementDiff(originalCode, candidateCode);
-    return hasApplicableDiffBlocks(originalCode, diffContent) ? diffContent : null;
+    const normalizedOriginal = originalCode.replace(/\r\n/g, '\n').trim();
+    const normalizedCandidate = candidateCode.replace(/\r\n/g, '\n').trim();
+    if (normalizedOriginal === normalizedCandidate) {
+        return null;
+    }
+
+    return buildFullCodeReplacementDiff(originalCode, candidateCode);
 }
 
 /** Проверяет, есть ли в ответе применимые изменения: diff-блоки или полный BSL-код. */

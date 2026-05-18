@@ -1,4 +1,4 @@
-import { Fragment, useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { Fragment, useRef, useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { BslDiagnostic } from '../../api/bsl';
 import { useChat, ToolCall, ChatMessage } from '../../contexts/ChatContext';
@@ -30,6 +30,11 @@ import { formatSyntaxSafeFallbackMessage, isRecoverableSyntaxValidationMessage, 
 import { resolveEffectiveSelectedDiagnostics } from '../../utils/diagnosticsSelection';
 import { resolveSlashCommandsForRuntime } from '../../utils/slashCommands';
 import { getStreamingAutoScrollTop, isChatNearBottom } from '../../utils/chatAutoScroll';
+import {
+    createDiffRenderSummaryCache,
+    createTextFingerprintCache,
+} from '../../utils/diffRenderCache';
+import { markInputLatency } from '../../utils/performanceDiagnostics';
 
 interface ChatAreaProps {
     originalCode?: string;
@@ -47,6 +52,21 @@ interface ChatAreaProps {
     onOpenSettings?: (tab?: string) => void;
     onActiveDiffChange?: (content: string) => void;
     activeDiffContent?: string;
+    getLatestWorkingCode?: () => string;
+}
+
+interface CachedDiffRenderSummary {
+    cleanedContent: string;
+    hasVisibleContent: boolean;
+    applicableDiffContent: string | null;
+    hasApplicableDiff: boolean;
+    hasBlockingIncompleteDiff: boolean;
+}
+
+const LARGE_DIFF_CONTENT_CHAR_LIMIT = 180_000;
+
+function isLargeDiffContent(content: string | null | undefined): boolean {
+    return (content?.length ?? 0) > LARGE_DIFF_CONTENT_CHAR_LIMIT;
 }
 
 interface OverlayExplainPayload {
@@ -228,8 +248,13 @@ function getCliProviderType(provider: string): ChatCliProvider | null {
 }
 
 function DiffSummaryBanner({ content, onApply, onReject, disabled }: { content: string, onApply?: () => void, onReject?: () => void, disabled?: boolean }) {
-    const blocks = useMemo(() => parseDiffBlocks(content), [content]);
+    const isLargeDiff = isLargeDiffContent(content);
+    const blocks = useMemo(() => isLargeDiff ? [] : parseDiffBlocks(content), [content, isLargeDiff]);
     const stats = useMemo(() => {
+        if (isLargeDiff) {
+            return null;
+        }
+
         let added = 0;
         let removed = 0;
         let modified = 0;
@@ -241,14 +266,20 @@ function DiffSummaryBanner({ content, onApply, onReject, disabled }: { content: 
             }
         });
         return { added, removed, modified };
-    }, [blocks]);
+    }, [blocks, isLargeDiff]);
 
     return (
         <div className="flex items-center gap-3 bg-zinc-900/40 border border-zinc-800/80 rounded-lg px-2 py-1 mt-2 w-fit ml-auto shadow-sm">
             <div className="flex items-center gap-2 text-[10px] font-mono leading-none">
-                <span className="text-emerald-500">+{stats.added}</span>
-                <span className="text-red-500">-{stats.removed}</span>
-                {stats.modified > 0 && <span className="text-blue-400">~{stats.modified}</span>}
+                {stats ? (
+                    <>
+                        <span className="text-emerald-500">+{stats.added}</span>
+                        <span className="text-red-500">-{stats.removed}</span>
+                        {stats.modified > 0 && <span className="text-blue-400">~{stats.modified}</span>}
+                    </>
+                ) : (
+                    <span className="text-blue-400">large diff</span>
+                )}
             </div>
             <div className="w-[1px] h-3 bg-zinc-800" />
             <div className="flex items-center gap-2">
@@ -304,7 +335,7 @@ function isCompressionSystemMessage(msg: ChatMessage): boolean {
     );
 }
 
-export function ChatArea({
+export const ChatArea = memo(function ChatArea({
     originalCode,
     modifiedCode,
     loadedContextCode,
@@ -319,7 +350,8 @@ export function ChatArea({
     selectedDiagnostics,
     onOpenSettings,
     onActiveDiffChange,
-    activeDiffContent
+    activeDiffContent,
+    getLatestWorkingCode,
 }: ChatAreaProps) {
     const { messages, compressionIndicator, isLoading, streamStartTime, chatStatus, currentIteration, messageQueue, activeSessionId, sendMessage, stopChat, editAndRerun, addSystemMessage, injectMessage, removeQueuedMessage, updateQueuedMessage, clearQueue, clearChat } = useChat();
     const { profiles, activeProfileId, activeProfile, setActiveProfile } = useProfiles();
@@ -355,6 +387,31 @@ export function ChatArea({
     const contextCode = loadedContextCode;
     const isContextSelection = isContextSelectionProp;
     const currentDiffBaseCode = modifiedCode || contextCode || originalCode || '';
+    const diffRenderCacheRef = useRef(createDiffRenderSummaryCache<CachedDiffRenderSummary>(160));
+    const textFingerprintCacheRef = useRef(createTextFingerprintCache(360));
+    const currentDiffBaseKey = useMemo(
+        () => textFingerprintCacheRef.current.get(currentDiffBaseCode),
+        [currentDiffBaseCode],
+    );
+    const getLatestCodeForActions = useCallback(() => {
+        return getLatestWorkingCode?.() ?? modifiedCode ?? '';
+    }, [getLatestWorkingCode, modifiedCode]);
+    const getDiffRenderSummary = useCallback((content: string, contentScopeKey: string): CachedDiffRenderSummary => {
+        const contentKey = `${contentScopeKey}:${textFingerprintCacheRef.current.get(content)}`;
+        return diffRenderCacheRef.current.get(currentDiffBaseKey, contentKey, () => {
+            const cleanedContent = cleanDiffArtifacts(content, currentDiffBaseCode);
+            const applicableDiffContent = getApplicableDiffContent(currentDiffBaseCode, content);
+            const hasBlockingIncompleteDiff = hasBlockingIncompleteDiffBlocks(content);
+
+            return {
+                cleanedContent,
+                hasVisibleContent: cleanedContent.trim().length > 0,
+                applicableDiffContent,
+                hasApplicableDiff: applicableDiffContent !== null,
+                hasBlockingIncompleteDiff,
+            };
+        });
+    }, [currentDiffBaseCode, currentDiffBaseKey]);
 
     // Slash Commands state
     const [showCommands, setShowCommands] = useState(false);
@@ -433,7 +490,7 @@ export function ChatArea({
         }
 
         let expanded = foundCmd.template;
-        let activeCode = options?.codeOverride ?? modifiedCode ?? contextCode ?? '';
+        let activeCode = options?.codeOverride ?? (getLatestCodeForActions() || contextCode || '');
         if (expanded.includes('{code}') && !options?.codeOverride && !activeCode && selectedHwnd) {
             try {
                 const fetchedCode = await getCode(true);
@@ -478,7 +535,7 @@ export function ChatArea({
         selectedDiagnostics,
         getCode,
         isNaparnikActive,
-        modifiedCode,
+        getLatestCodeForActions,
         resolveSlashCommand,
         selectedHwnd,
         settings?.mcp_servers,
@@ -764,6 +821,8 @@ export function ChatArea({
             });
         }
         if (messages.length === 0) {
+            diffRenderCacheRef.current.clear();
+            textFingerprintCacheRef.current.clear();
             setConfiguratorTitleCtx(null);
             setAppliedDiffMessages(new Set());
             setDismissedDiffMessages(new Set());
@@ -784,7 +843,7 @@ export function ChatArea({
         if (messages.length === 0) return;
         const lastMsg = messages[messages.length - 1];
         const applicableDiffContent = lastMsg.role === 'assistant'
-            ? getApplicableDiffContent(currentDiffBaseCode, lastMsg.content)
+            ? getDiffRenderSummary(lastMsg.content, `message:${lastMsg.id || messages.length - 1}`).applicableDiffContent
             : null;
         if (!applicableDiffContent) return;
 
@@ -798,7 +857,7 @@ export function ChatArea({
             // Открываем боковую панель только если есть базовый код для сравнения.
             // Если код не был загружен из Конфигуратора — панель не открываем.
             const hasBaseCode = !!currentDiffBaseCode;
-            if (hasBaseCode && onActiveDiffChange) {
+            if (hasBaseCode && onActiveDiffChange && !isLargeDiffContent(applicableDiffContent)) {
                 onActiveDiffChange(applicableDiffContent);
             }
             // Фиксируем как "показанное"
@@ -806,7 +865,7 @@ export function ChatArea({
                 setAppliedDiffMessages(prev => new Set(prev).add(msgKey));
             }
         }
-    }, [messages, isLoading, onActiveDiffChange, appliedDiffMessages, diffActions, activeDiffContent, currentDiffBaseCode]);
+    }, [messages, isLoading, onActiveDiffChange, appliedDiffMessages, diffActions, activeDiffContent, currentDiffBaseCode, getDiffRenderSummary]);
 
     const handleSendMessage = async (textOverride?: string) => {
         const rawInput = textOverride || input;
@@ -828,7 +887,7 @@ export function ChatArea({
 
         if (!textToSend.trim()) return;
 
-        const requestBaseCode = modifiedCode || contextCode || originalCode || '';
+        const requestBaseCode = getLatestCodeForActions() || contextCode || originalCode || '';
         if (requestBaseCode.trim()) {
             onPrepareDiffBase?.(requestBaseCode);
         }
@@ -858,7 +917,7 @@ export function ChatArea({
 
         // Если это расширенная слеш-команда, мы НЕ передаем contextCode повторно, 
         // так как он уже вставлен в expanded-шаблон через {code}
-        const finalContext = isSlashCommand ? undefined : (modifiedCode || contextCode || undefined);
+        const finalContext = isSlashCommand ? undefined : (getLatestCodeForActions() || contextCode || undefined);
 
         sendMessage(textToSend, finalContext, diagStrings, displayContent, configuratorTitleCtx);
         setInput('');
@@ -927,7 +986,7 @@ export function ChatArea({
             },
             getCodeState: () => ({
                 originalCode,
-                modifiedCode,
+                modifiedCode: getLatestCodeForActions() || modifiedCode,
                 loadedContextCode: contextCode,
                 activeDiffContent: activeDiffContent || '',
             }),
@@ -939,6 +998,7 @@ export function ChatArea({
         expandSlashCommand,
         handleSendMessage,
         injectMessage,
+        getLatestCodeForActions,
         modifiedCode,
         onApplyCode,
         onCodeLoaded,
@@ -947,6 +1007,7 @@ export function ChatArea({
     ]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        markInputLatency('chat-input');
         const value = e.target.value;
         const cursorPosition = e.target.selectionStart;
         setInput(value);
@@ -1033,7 +1094,7 @@ export function ChatArea({
         if (editText.trim()) {
             const editDiagSource = resolveDiagnosticsForChat(diagnostics || [], selectedDiagnostics).effectiveDiagnostics;
             const diagStrings = editDiagSource.map((d: any) => `- Line ${d.line + 1}: ${d.message} (${d.severity})`);
-            const rerunBaseCode = modifiedCode || contextCode || originalCode || '';
+            const rerunBaseCode = getLatestCodeForActions() || contextCode || originalCode || '';
             if (rerunBaseCode.trim()) {
                 onPrepareDiffBase?.(rerunBaseCode);
             }
@@ -1055,12 +1116,12 @@ export function ChatArea({
     // два сообщения показывают кнопки одновременно.
     const lastDiffMsgIndex = useMemo(() => {
         for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === 'assistant' && getApplicableDiffContent(currentDiffBaseCode, messages[i].content)) {
+            if (messages[i].role === 'assistant' && getDiffRenderSummary(messages[i].content, `message:${messages[i].id || i}`).hasApplicableDiff) {
                 return i;
             }
         }
         return -1;
-    }, [messages, currentDiffBaseCode]);
+    }, [messages, getDiffRenderSummary]);
 
     return (
         <div id="chat-area" className="flex flex-col flex-1 min-w-[300px] transition-all duration-300">
@@ -1225,6 +1286,7 @@ export function ChatArea({
                                                         }
                                                         return acc;
                                                     }, []).map((part, partIdx) => {
+                                                        const msgKey = msg.id || String(i);
                                                         if (part.type === 'thinking') {
                                                             const thinkingKey = `${i}-${partIdx}`;
                                                             const isThinkingStreaming = isLoading && i === messages.length - 1;
@@ -1256,13 +1318,11 @@ export function ChatArea({
                                                             );
                                                         } else {
                                                             // text
-                                                            const currentOriginalCode = modifiedCode || contextCode || originalCode || "";
-                                                            const cleanedContent = cleanDiffArtifacts(part.content || '', currentOriginalCode);
-                                                            const hasApplicableDiff = !!getApplicableDiffContent(currentOriginalCode, part.content || '');
-                                                            const hasBlockingIncompleteDiff = hasBlockingIncompleteDiffBlocks(part.content || '');
-                                                            if (cleanedContent.trim().length === 0) {
-                                                                if (!hasApplicableDiff) {
-                                                                    if (!hasBlockingIncompleteDiff) return null;
+                                                            const currentOriginalCode = currentDiffBaseCode;
+                                                        const diffSummary = getDiffRenderSummary(part.content || '', `part:${msgKey}:${partIdx}`);
+                                                            if (!diffSummary.hasVisibleContent) {
+                                                                if (!diffSummary.hasApplicableDiff) {
+                                                                    if (!diffSummary.hasBlockingIncompleteDiff) return null;
                                                                     return (
                                                                         <div key={partIdx} className="flex items-center gap-1.5 text-amber-400/80 text-xs italic py-0.5">
                                                                             <FileDiff className="w-3 h-3 flex-shrink-0" />
@@ -1351,16 +1411,14 @@ export function ChatArea({
 
                                                     {/* Content */}
                                                     {(() => {
-                                                        const currentOriginalCode = modifiedCode || contextCode || originalCode || "";
-                                                        const cleanedContent = cleanDiffArtifacts(msg.content || '', currentOriginalCode);
-                                                        const hasVisibleContent = cleanedContent.trim().length > 0;
-                                                        const hasApplicableDiff = !!getApplicableDiffContent(currentOriginalCode, msg.content || '');
-                                                        const hasBlockingIncompleteDiff = hasBlockingIncompleteDiffBlocks(msg.content || '');
+                                                        const currentOriginalCode = currentDiffBaseCode;
+                                                        const msgKey = msg.id || String(i);
+                                                        const diffSummary = getDiffRenderSummary(msg.content || '', `message:${msgKey}`);
 
                                                         if (msg.role !== 'assistant') return null;
-                                                        if (!hasVisibleContent) {
-                                                            if (!hasApplicableDiff) {
-                                                                if (!hasBlockingIncompleteDiff) return null;
+                                                        if (!diffSummary.hasVisibleContent) {
+                                                            if (!diffSummary.hasApplicableDiff) {
+                                                                if (!diffSummary.hasBlockingIncompleteDiff) return null;
                                                                 return (
                                                                     <div className="flex items-center gap-1.5 text-amber-400/80 text-xs italic py-0.5">
                                                                         <FileDiff className="w-3 h-3 flex-shrink-0" />
@@ -1419,8 +1477,8 @@ export function ChatArea({
                                                             );
                                                         }
 
-                                                        const currentOriginalCode = modifiedCode || contextCode || originalCode || "";
-                                                        const applicableDiffContent = getApplicableDiffContent(currentOriginalCode, msg.content);
+                                                        const currentOriginalCode = currentDiffBaseCode;
+                                                        const applicableDiffContent = getDiffRenderSummary(msg.content, `message:${msgKey}`).applicableDiffContent;
                                                         const hasContext = currentOriginalCode.trim().length > 0;
                                                         const shouldShowBanner = hasContext &&
                                                             i === lastDiffMsgIndex &&
@@ -2009,4 +2067,4 @@ export function ChatArea({
             )}
         </div >
     );
-}
+});

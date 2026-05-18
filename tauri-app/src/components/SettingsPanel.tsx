@@ -16,6 +16,7 @@ import { SlashCommandsTab } from './settings/SlashCommandsTab';
 import { useProfiles } from '../contexts/ProfileContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { WindowInfo, BslStatus, AppSettings, BslDiagnosticItem } from '../types/settings';
+import { flushPerformanceDiagnosticsToLog } from '../utils/performanceDiagnostics';
 
 interface SettingsPanelProps {
     isOpen: boolean;
@@ -363,7 +364,10 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                                 window.location.reload();
                             }}
                             saveDebugLogs={async () => {
-                                try { await invoke('save_debug_logs'); } catch (e) { console.error(e); }
+                                try {
+                                    await flushPerformanceDiagnosticsToLog('save_debug_logs');
+                                    await invoke('save_debug_logs');
+                                } catch (e) { console.error(e); }
                             }}
                             currentProvider={activeProfile?.provider}
                         />

@@ -27,6 +27,36 @@ interface MarkdownRendererProps {
     originalCode?: string; // Original code for diff view
 }
 
+const LARGE_CODE_BLOCK_CHAR_LIMIT = 120_000;
+const LARGE_CODE_BLOCK_PREVIEW_LINES = 18;
+
+function countLines(text: string): number {
+    let count = 1;
+    for (let i = 0; i < text.length; i += 1) {
+        if (text.charCodeAt(i) === 10) count += 1;
+    }
+    return count;
+}
+
+function previewLines(text: string, limit = LARGE_CODE_BLOCK_PREVIEW_LINES): string {
+    const lines = text.split('\n');
+    if (lines.length <= limit) return text;
+    return `${lines.slice(0, limit).join('\n')}\n...`;
+}
+
+function extractLargeBslBlock(content: string): { before: string; code: string; after: string } | null {
+    const match = /```(?:bsl|1c|1с)[^\n\r]*\n([\s\S]*?)```/i.exec(content);
+    if (!match || match[1].length <= LARGE_CODE_BLOCK_CHAR_LIMIT) {
+        return null;
+    }
+
+    return {
+        before: content.slice(0, match.index).trim(),
+        code: match[1].replace(/\n$/, ''),
+        after: content.slice(match.index + match[0].length).trim(),
+    };
+}
+
 // Утилита для очистки diff-артефактов и технических фраз
 export function cleanDiffArtifacts(content: string, originalCode?: string): string {
     if (!content) return '';
@@ -165,6 +195,62 @@ interface CodeBlockProps {
     [key: string]: any;
 }
 
+interface LargeBslCodeBlockProps {
+    codeString: string;
+    onApplyCode?: (code: string) => void;
+}
+
+const LargeBslCodeBlock = memo(function LargeBslCodeBlock({ codeString, onApplyCode }: LargeBslCodeBlockProps) {
+    const { copied, copy } = useCopy(codeString);
+    const lineCount = useMemo(() => countLines(codeString), [codeString]);
+    const preview = useMemo(() => previewLines(codeString), [codeString]);
+
+    return (
+        <div className="relative my-4 group w-full">
+            <div className="flex flex-wrap items-center justify-between gap-y-1 px-3 py-1.5 bg-zinc-800/80 backdrop-blur-sm rounded-t-lg border-x border-t border-[#27272a]">
+                <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest whitespace-nowrap">BSL (1C:Enterprise)</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-700/70 text-zinc-300 font-bold uppercase whitespace-nowrap">
+                        large preview
+                    </span>
+                    <span className="text-[10px] text-zinc-500 whitespace-nowrap">
+                        {lineCount.toLocaleString()} lines / {codeString.length.toLocaleString()} chars
+                    </span>
+                </div>
+                <div className="flex items-center gap-1.5 ml-auto">
+                    <button
+                        onClick={copy}
+                        className="p-1 px-2 text-[11px] font-medium text-zinc-400 hover:text-white transition-all hover:bg-zinc-700/50 rounded-md flex items-center gap-1 whitespace-nowrap"
+                        title={copied ? 'Скопировано!' : 'Копировать код'}
+                    >
+                        {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copied ? 'OK' : 'Copy'}</span>
+                    </button>
+                    {onApplyCode && (
+                        <button
+                            onClick={() => onApplyCode(normalizeBslIndent(decodeHtmlEntities(codeString)))}
+                            className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium text-blue-400 hover:text-blue-300 transition-all hover:bg-blue-400/10 rounded-md whitespace-nowrap"
+                            title="Load into Side Panel"
+                        >
+                            <PanelRight className="w-3.5 h-3.5" />
+                            <span>Применить</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+            <div className="bg-[#1e1e1e] border border-[#27272a] rounded-b-lg overflow-hidden border-t-0">
+                <div className="px-4 py-2 text-[11px] text-zinc-500 border-b border-zinc-800">
+                    Полный блок слишком большой для встроенной подсветки; показан краткий preview, полный код доступен через Copy/Применить.
+                </div>
+                <pre className="p-4 overflow-auto w-full text-zinc-300 text-[13px] font-mono whitespace-pre custom-scrollbar max-h-[360px]">
+                    {preview}
+                </pre>
+            </div>
+        </div>
+    );
+});
+
 const CodeBlock = memo(({ inline, className, children, isStreaming, onApplyCode, originalCode, ...props }: CodeBlockProps) => {
     const match = /language-(\w+)/.exec(className || '');
     const language = match ? match[1] : '';
@@ -182,6 +268,10 @@ const CodeBlock = memo(({ inline, className, children, isStreaming, onApplyCode,
                 {children}
             </code>
         );
+    }
+
+    if (isBsl && codeString.length > LARGE_CODE_BLOCK_CHAR_LIMIT) {
+        return <LargeBslCodeBlock codeString={codeString} onApplyCode={onApplyCode} />;
     }
 
     if (isStreaming) {
@@ -426,9 +516,38 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, isStre
         },
     }), [isStreaming, onApplyCode, originalCode]);
 
-    const processedContent = isStreaming
-        ? fixStreamingMarkdown(cleanDiffArtifacts(content, originalCode))
-        : cleanDiffArtifacts(content, originalCode);
+    const processedContent = useMemo(() => (
+        isStreaming
+            ? fixStreamingMarkdown(cleanDiffArtifacts(content, originalCode))
+            : cleanDiffArtifacts(content, originalCode)
+    ), [content, isStreaming, originalCode]);
+    const largeBslBlock = useMemo(() => extractLargeBslBlock(processedContent), [processedContent]);
+
+    if (largeBslBlock) {
+        return (
+            <>
+                {largeBslBlock.before && (
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw]}
+                        components={components as any}
+                    >
+                        {largeBslBlock.before}
+                    </ReactMarkdown>
+                )}
+                <LargeBslCodeBlock codeString={largeBslBlock.code} onApplyCode={onApplyCode} />
+                {largeBslBlock.after && (
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeRaw]}
+                        components={components as any}
+                    >
+                        {largeBslBlock.after}
+                    </ReactMarkdown>
+                )}
+            </>
+        );
+    }
 
     return (
         <ReactMarkdown
