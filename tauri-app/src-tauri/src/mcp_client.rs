@@ -680,7 +680,11 @@ impl McpSession {
         Self {
             config: config.clone(),
             transport: TransportImpl::Http {
-                client: Client::builder()
+                client: crate::http_client::http_client_builder()
+                    .unwrap_or_else(|error| {
+                        crate::app_log!("[MCP] Proxy settings ignored for HTTP client: {}", error);
+                        Client::builder()
+                    })
                     .timeout(Duration::from_secs(30))
                     .build()
                     .unwrap_or_default(),
@@ -2081,7 +2085,9 @@ mod tests {
         assert!(is_stdio_node_launcher_command("/opt/node/bin/node"));
         assert!(is_stdio_node_launcher_command("node"));
         assert!(is_stdio_node_launcher_command("npx.cmd"));
-        assert!(!is_stdio_node_launcher_command(r"C:\tools\mcp-1c-search.exe"));
+        assert!(!is_stdio_node_launcher_command(
+            r"C:\tools\mcp-1c-search.exe"
+        ));
     }
 
     #[test]
@@ -2206,7 +2212,9 @@ mod tests {
         // not the relative-looking UNC\server\share\... that Node.js misinterprets
         // as cwd-relative (issue #165).
         assert_eq!(
-            McpSession::normalize_extended_path(r"\\?\UNC\server\share\mcp-servers\1c-naparnik.cjs"),
+            McpSession::normalize_extended_path(
+                r"\\?\UNC\server\share\mcp-servers\1c-naparnik.cjs"
+            ),
             r"\\server\share\mcp-servers\1c-naparnik.cjs"
         );
     }

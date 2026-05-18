@@ -241,7 +241,10 @@ fn prune_tool_context(messages: &mut Vec<ApiMessage>, max_tokens: usize) {
 
 /// Clear 1С:Напарник session (called on chat clear when provider == OneCNaparnik)
 fn assistant_message_has_meaningful_payload(message: &ApiMessage) -> bool {
-    message.content.as_deref().is_some_and(|content| !content.is_empty())
+    message
+        .content
+        .as_deref()
+        .is_some_and(|content| !content.is_empty())
         || message
             .tool_calls
             .as_ref()
@@ -917,7 +920,7 @@ pub async fn compact_context(messages_json: String) -> Result<String, String> {
 
     let api_key = crate::ai::client::resolve_profile_api_key(&profile)?;
     let raw_url = profile.get_base_url();
-    let client = reqwest::Client::new();
+    let client = crate::http_client::build_http_client()?;
 
     if matches!(profile.provider, crate::llm_profiles::LLMProvider::Ollama) {
         let trimmed = raw_url.trim_end_matches('/');
@@ -990,7 +993,7 @@ pub async fn compact_context(messages_json: String) -> Result<String, String> {
         "max_tokens": 1024,
     });
 
-    let client = reqwest::Client::new();
+    let client = crate::http_client::build_http_client()?;
     let response = client
         .post(&base_url)
         .header("Authorization", format!("Bearer {}", api_key))

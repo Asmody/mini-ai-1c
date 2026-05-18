@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { Download, RefreshCw, Upload, Info, ExternalLink, FolderOpen, Terminal, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Download, RefreshCw, Upload, Info, ExternalLink, FolderOpen, Terminal, CheckCircle2, AlertCircle, Network } from 'lucide-react';
 import { getVersion } from '@tauri-apps/api/app';
 
 import {
@@ -9,8 +9,9 @@ import {
     importSettingsFromFile,
     validateImportSettingsFile,
 } from '../../api/settings';
-import { AppSettings } from '../../types/settings';
+import { AppSettings, DEFAULT_PROXY_SETTINGS, ProxyMode, ProxyProtocol, ProxySettings } from '../../types/settings';
 import { getNodePathInputValue, getNodePathPreview } from '../../utils/mcpNodePath';
+import { normalizeProxyPortInput } from '../../utils/proxySettings';
 
 type UpdateStatus = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error';
 
@@ -53,6 +54,25 @@ export function GeneralTab({
     const nodePathInputValue = getNodePathInputValue(settings.node_path);
     const nodePathPreview = getNodePathPreview(settings.node_path, detectedNodePath);
     const nodePathToCheck = nodePathInputValue || settings.node_path || 'node';
+    const proxy = settings.proxy ?? DEFAULT_PROXY_SETTINGS;
+
+    const updateProxy = (updates: Partial<ProxySettings>) => {
+        setSettings({
+            ...settings,
+            proxy: {
+                ...DEFAULT_PROXY_SETTINGS,
+                ...proxy,
+                ...updates,
+            },
+        });
+    };
+
+    const updateProxyPort = (value: string) => {
+        const port = normalizeProxyPortInput(value);
+        if (port !== undefined) {
+            updateProxy({ port });
+        }
+    };
 
     useEffect(() => {
         getVersion().then(setAppVersion).catch(() => setAppVersion('?'));
@@ -196,6 +216,88 @@ export function GeneralTab({
     return (
         <div className="h-full w-full overflow-y-auto p-4 sm:p-8">
             <div className="mx-auto max-w-2xl space-y-6 sm:space-y-8">
+                <section>
+                    <h3 className="mb-4 flex items-center gap-2 text-lg font-medium text-zinc-100">
+                        <Network className="h-4 w-4 text-blue-400" />
+                        Прокси
+                    </h3>
+
+                    <div className="space-y-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-5">
+                        <div className="grid gap-2 sm:grid-cols-3">
+                            {([
+                                ['system', 'Системный'],
+                                ['disabled', 'Выкл'],
+                                ['custom', 'Свой'],
+                            ] as const).map(([mode, label]) => {
+                                const active = proxy.mode === mode;
+                                return (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => updateProxy({ mode: mode as ProxyMode })}
+                                        className={`rounded-lg border px-3 py-2 text-sm transition ${
+                                            active
+                                                ? 'border-blue-500 bg-blue-600 text-white'
+                                                : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {proxy.mode === 'custom' && (
+                            <div className="space-y-3">
+                                <div className="grid gap-3 sm:grid-cols-[130px_minmax(0,1fr)_110px]">
+                                    <select
+                                        value={proxy.protocol}
+                                        onChange={(event) => updateProxy({ protocol: event.target.value as ProxyProtocol })}
+                                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value="http">HTTP</option>
+                                        <option value="socks5">SOCKS5</option>
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={proxy.host}
+                                        onChange={(event) => updateProxy({ host: event.target.value })}
+                                        placeholder="proxy.company.local"
+                                        className="min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
+                                    />
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={65535}
+                                        step={1}
+                                        value={proxy.port ?? ''}
+                                        onChange={(event) => updateProxyPort(event.target.value)}
+                                        placeholder="8080"
+                                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
+                                    />
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <input
+                                        type="text"
+                                        value={proxy.username}
+                                        onChange={(event) => updateProxy({ username: event.target.value })}
+                                        placeholder="Логин"
+                                        className="min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
+                                    />
+                                    <input
+                                        type="password"
+                                        value={proxy.password}
+                                        onChange={(event) => updateProxy({ password: event.target.value })}
+                                        placeholder="Пароль"
+                                        className="min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:border-blue-500 focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </section>
+
                 <section>
                     <h3 className="mb-4 text-lg font-medium text-zinc-100">Сжатие контекста</h3>
 

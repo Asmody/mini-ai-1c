@@ -62,6 +62,9 @@ fn sanitize_settings_for_export(mut safe_settings: AppSettings) -> AppSettings {
         provider.api_key = None;
     }
 
+    safe_settings.proxy.username.clear();
+    safe_settings.proxy.password.clear();
+
     safe_settings
 }
 
@@ -118,6 +121,9 @@ fn restore_sensitive_settings(mut imported: AppSettings, current: &AppSettings) 
             provider.api_key = None;
         }
     }
+
+    imported.proxy.username = current.proxy.username.clone();
+    imported.proxy.password = current.proxy.password.clone();
 
     imported
 }
@@ -480,7 +486,8 @@ mod tests {
     };
     use crate::llm_profiles::{LLMProfile, LLMProvider, ProfileStore};
     use crate::settings::{
-        AppSettings, McpServerConfig, McpTransport, ModelSettings, ProviderSettings,
+        AppSettings, McpServerConfig, McpTransport, ModelSettings, ProviderSettings, ProxyMode,
+        ProxyProtocol, ProxySettings,
     };
     use std::collections::HashMap;
 
@@ -529,6 +536,14 @@ mod tests {
                 args: None,
                 env: Some(HashMap::from([("TOKEN".to_string(), "secret".to_string())])),
             }],
+            proxy: ProxySettings {
+                mode: ProxyMode::Custom,
+                protocol: ProxyProtocol::Http,
+                host: "proxy.corp.local".to_string(),
+                port: Some(8080),
+                username: "proxy-user".to_string(),
+                password: "proxy-secret".to_string(),
+            },
             ..AppSettings::default()
         }
     }
@@ -552,7 +567,6 @@ mod tests {
                     stream_timeout_secs: Some(60),
                     context_compress_strategy: "summarize".to_string(),
                     max_context_messages: Some(50),
-                    disable_native_tools: None,
                 },
                 LLMProfile {
                     id: "profile-2".to_string(),
@@ -570,7 +584,6 @@ mod tests {
                     stream_timeout_secs: Some(30),
                     context_compress_strategy: "disabled".to_string(),
                     max_context_messages: None,
-                    disable_native_tools: None,
                 },
             ],
             active_profile_id: "profile-2".to_string(),
@@ -609,6 +622,8 @@ mod tests {
         assert_eq!(server.headers, None);
         assert_eq!(server.env, None);
         assert_eq!(provider.api_key, None);
+        assert_eq!(sanitized.proxy.username, "");
+        assert_eq!(sanitized.proxy.password, "");
     }
 
     #[test]
@@ -683,6 +698,14 @@ mod tests {
                 models: HashMap::new(),
             },
         );
+        current.proxy = ProxySettings {
+            mode: ProxyMode::Custom,
+            protocol: ProxyProtocol::Http,
+            host: "proxy.corp.local".to_string(),
+            port: Some(8080),
+            username: "current-proxy-user".to_string(),
+            password: "current-proxy-secret".to_string(),
+        };
 
         let imported = restore_sensitive_settings(
             sanitize_settings_for_export(settings_with_sensitive_data()),
@@ -705,6 +728,8 @@ mod tests {
             server.env.as_ref().and_then(|env| env.get("TOKEN")),
             Some(&"current-secret".to_string())
         );
+        assert_eq!(imported.proxy.username, "current-proxy-user");
+        assert_eq!(imported.proxy.password, "current-proxy-secret");
         assert_eq!(provider.api_key.as_deref(), Some("current-api-key"));
     }
 

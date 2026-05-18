@@ -459,7 +459,7 @@ async fn send_codex_request(
     account_id: Option<&str>,
 ) -> Result<reqwest::Response, String> {
     let headers = build_headers(access_token, account_id)?;
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::http_client_builder()?
         .timeout(std::time::Duration::from_secs(CODEX_HTTP_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("HTTP client build error: {}", e))?;
@@ -680,7 +680,7 @@ pub async fn stream_codex_completion(
 
     let headers = build_headers(&access_token, account_id.as_deref())?;
 
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::http_client_builder()?
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| format!("HTTP client build error: {}", e))?;
