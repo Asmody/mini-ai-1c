@@ -11,6 +11,7 @@ import { CliStatus, CliUsageWindow } from '../../types/settings';
 import { LLMProfile, ProfileStore } from '../../contexts/ProfileContext';
 import { applyFetchedModelMetadata, applySelectedModelMetadata } from '../../utils/llmProfileModelMetadata';
 import { isOllamaCloudProfile } from '../../utils/profileHelpers';
+import { shouldResetApiKeyDraft } from '../../utils/profileSecretDraft';
 
 interface LLMSettingsProps {
     profiles: ProfileStore;
@@ -96,12 +97,14 @@ export function LLMSettings({ profiles, onUpdate }: LLMSettingsProps) {
         if (editingId) {
             const p = profiles.profiles.find(p => p.id === editingId);
             if (p) {
-                const isNewProfile = prevEditingIdRef.current !== editingId;
+                const isNewProfile = shouldResetApiKeyDraft(prevEditingIdRef.current, editingId);
                 prevEditingIdRef.current = editingId;
 
                 setEditForm(prev => (prev?.id === editingId ? prev : { ...p }));
-                setNewApiKey('');
-                setConnectionTest(null);
+                if (isNewProfile) {
+                    setNewApiKey('');
+                    setConnectionTest(null);
+                }
 
                 // Only reset model list when switching to a different profile
                 if (isNewProfile) {
