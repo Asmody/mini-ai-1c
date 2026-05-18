@@ -28,6 +28,7 @@ import { ContextUsageBar } from './ContextUsageBar';
 import { applySelectiveFixScopeInstructions } from '../../utils/fixPromptScope';
 import { formatSyntaxSafeFallbackMessage, isRecoverableSyntaxValidationMessage, salvageSyntaxSafeDiffBlocks } from '../../utils/bslSyntaxGuard';
 import { resolveEffectiveSelectedDiagnostics } from '../../utils/diagnosticsSelection';
+import { resolveSlashCommandsForRuntime } from '../../utils/slashCommands';
 
 interface ChatAreaProps {
     originalCode?: string;
@@ -358,15 +359,7 @@ export function ChatArea({
     const [showCommands, setShowCommands] = useState(false);
     const [commandFilter, setCommandFilter] = useState('');
     const resolvedSlashCommands = useMemo(() => {
-        const saved = settings?.slash_commands || DEFAULT_SLASH_COMMANDS;
-        // Системные команды всегда используют актуальный шаблон из дефолтов
-        return saved.map(cmd => {
-            if (cmd.is_system) {
-                const def = DEFAULT_SLASH_COMMANDS.find(d => d.id === cmd.id);
-                if (def) return { ...cmd, template: def.template };
-            }
-            return cmd;
-        });
+        return resolveSlashCommandsForRuntime(settings?.slash_commands, DEFAULT_SLASH_COMMANDS);
     }, [settings?.slash_commands]);
 
     const availableCommands = useMemo(() => {

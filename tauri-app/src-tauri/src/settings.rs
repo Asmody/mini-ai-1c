@@ -87,6 +87,15 @@ fn default_slash_commands() -> Vec<SlashCommand> {
             is_system: true,
         },
         SlashCommand {
+            id: "elaborate".to_string(),
+            command: "доработай".to_string(),
+            name: "Доработай".to_string(),
+            description: "Доработать код по пользовательской задаче".to_string(),
+            template: "Доработай этот код по следующей задаче: {query}\n\nТребования:\n- вноси только изменения, которые нужны для выполнения задачи;\n- сохрани стиль и совместимость с 1С;\n- если меняешь код, верни результат в формате, пригодном для сравнения и применения.\n\nКод для доработки:\n```bsl\n{code}\n```".to_string(),
+            is_enabled: true,
+            is_system: true,
+        },
+        SlashCommand {
             id: "refactor".to_string(),
             command: "рефакторинг".to_string(),
             name: "Рефакторинг".to_string(),
@@ -168,6 +177,32 @@ fn default_slash_commands() -> Vec<SlashCommand> {
             is_system: true,
         },
     ]
+}
+
+fn ensure_default_slash_commands(settings: &mut AppSettings) -> bool {
+    let defaults = default_slash_commands();
+
+    if settings.slash_commands.is_empty() {
+        settings.slash_commands = defaults;
+        return true;
+    }
+
+    let existing_ids: std::collections::HashSet<String> = settings
+        .slash_commands
+        .iter()
+        .map(|command| command.id.clone())
+        .collect();
+    let missing_system_commands: Vec<SlashCommand> = defaults
+        .into_iter()
+        .filter(|command| command.is_system && !existing_ids.contains(&command.id))
+        .collect();
+
+    if missing_system_commands.is_empty() {
+        return false;
+    }
+
+    settings.slash_commands.extend(missing_system_commands);
+    true
 }
 
 /// Settings for 1C Configurator integration
@@ -732,27 +767,8 @@ pub fn load_settings() -> AppSettings {
     }
 
     // Migration: ensure default slash commands exist
-    if settings.slash_commands.is_empty() {
-        settings.slash_commands = default_slash_commands();
+    if ensure_default_slash_commands(&mut settings) {
         modified = true;
-    } else {
-        // Inject new system commands that may be missing in existing settings
-        let new_system_ids = ["search-1c", "refs-1c", "struct-1c"];
-        let existing_ids: std::collections::HashSet<String> = settings
-            .slash_commands
-            .iter()
-            .map(|c| c.id.clone())
-            .collect();
-        let to_add: Vec<SlashCommand> = default_slash_commands()
-            .into_iter()
-            .filter(|cmd| {
-                new_system_ids.contains(&cmd.id.as_str()) && !existing_ids.contains(&cmd.id)
-            })
-            .collect();
-        if !to_add.is_empty() {
-            settings.slash_commands.extend(to_add);
-            modified = true;
-        }
     }
 
     let profile_store = crate::llm_profiles::load_profiles();
@@ -976,5 +992,17 @@ mod tests {
             server.args,
             Some(vec!["mcp-servers/1c-naparnik.cjs".to_string()])
         );
+    }
+
+    #[test]
+    fn ensure_default_slash_commands_adds_missing_system_commands() {
+        let mut settings = AppSettings::default();
+        settings.slash_commands.retain(|cmd| cmd.id != "elaborate");
+
+        assert!(ensure_default_slash_commands(&mut settings));
+        assert!(settings
+            .slash_commands
+            .iter()
+            .any(|cmd| cmd.id == "elaborate"));
     }
 }
