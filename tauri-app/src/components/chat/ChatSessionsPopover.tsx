@@ -2,6 +2,7 @@ import { Download, MessageSquarePlus, Search, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChatSession } from '../../hooks/useChatSessions';
 import { useSettings } from '../../contexts/SettingsContext';
+import { formatChatSessionStats } from '../../utils/chatSessionStats';
 
 interface Props {
     sessions: ChatSession[];
@@ -138,6 +139,7 @@ export function ChatSessionsPopover({
                     const canExportSession = session.messages.some(
                         (message) => (message.role === 'user' || message.role === 'assistant') && message.variant == null
                     );
+                    const statsLabel = formatChatSessionStats(session.messages);
 
                     return (
                         <div
@@ -170,8 +172,16 @@ export function ChatSessionsPopover({
                                 >
                                     {session.title}
                                 </div>
-                                <div className="mt-1 text-xs text-zinc-500">
-                                    {formatRelativeTime(session.updatedAt)}
+                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+                                    <span>{formatRelativeTime(session.updatedAt)}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span
+                                        data-testid={`chat-history-stats-${session.id}`}
+                                        title={statsLabel}
+                                        className="min-w-0 break-words"
+                                    >
+                                        {statsLabel}
+                                    </span>
                                 </div>
                             </div>
 

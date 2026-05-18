@@ -1684,6 +1684,7 @@ export const ChatArea = memo(function ChatArea({
 
                     <textarea
                         ref={inputRef}
+                        data-testid="chat-textarea"
                         value={input}
                         onChange={handleInputChange}
                         onKeyDown={handleKeyDown}
@@ -1706,6 +1707,7 @@ export const ChatArea = memo(function ChatArea({
                             {/* Кнопка [+] (Опции) */}
                             <div className="relative">
                                 <button
+                                    data-testid="profile-selector-trigger"
                                     onClick={() => setShowModelDropdown(!showModelDropdown)}
                                     className="h-8 w-12 flex items-center justify-center gap-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition-all active:scale-95 flex-shrink-0"
                                     title="Настройки профиля и генерации"
@@ -1778,6 +1780,8 @@ export const ChatArea = memo(function ChatArea({
                                                     {profiles.filter(p => getCliProviderType(p.provider) === null && p.provider !== 'OneCNaparnik' && !isOllamaCloudProfile(p)).map(p => (
                                                         <div
                                                             key={p.id}
+                                                            data-testid={`profile-item-${p.id}`}
+                                                            data-profile-active={activeProfileId === p.id ? 'true' : 'false'}
                                                             className={`group px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${activeProfileId === p.id ? 'bg-blue-500/10' : 'hover:bg-zinc-800/50'}`}
                                                             onClick={() => {
                                                                 setActiveProfile(p.id);
@@ -1810,6 +1814,8 @@ export const ChatArea = memo(function ChatArea({
                                                         return (
                                                             <div
                                                                 key={p.id}
+                                                                data-testid={`profile-item-${p.id}`}
+                                                                data-profile-active={activeProfileId === p.id ? 'true' : 'false'}
                                                                 className={`group px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${activeProfileId === p.id ? activeRowClass : 'hover:bg-zinc-800/50'}`}
                                                                 onClick={() => {
                                                                     if (!isAuthenticated) {
@@ -1852,6 +1858,8 @@ export const ChatArea = memo(function ChatArea({
                                                     {profiles.filter(p => p.provider === 'OneCNaparnik').map(p => (
                                                         <div
                                                             key={p.id}
+                                                            data-testid={`profile-item-${p.id}`}
+                                                            data-profile-active={activeProfileId === p.id ? 'true' : 'false'}
                                                             className={`group px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${activeProfileId === p.id ? 'bg-orange-500/10' : 'hover:bg-zinc-800/50'}`}
                                                             onClick={() => {
                                                                 setActiveProfile(p.id);
@@ -1875,6 +1883,8 @@ export const ChatArea = memo(function ChatArea({
                                                     {profiles.filter(isOllamaCloudProfile).map(p => (
                                                         <div
                                                             key={p.id}
+                                                            data-testid={`profile-item-${p.id}`}
+                                                            data-profile-active={activeProfileId === p.id ? 'true' : 'false'}
                                                             className={`group px-3 py-2 flex items-center justify-between cursor-pointer transition-colors ${activeProfileId === p.id ? 'bg-cyan-500/10' : 'hover:bg-zinc-800/50'}`}
                                                             onClick={() => {
                                                                 setActiveProfile(p.id);
@@ -2032,7 +2042,12 @@ export const ChatArea = memo(function ChatArea({
                                 )}
                             </div>
 
-                            <button onClick={isLoading ? stopChat : () => handleSendMessage()} disabled={!isLoading && !input.trim()} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 ${isLoading ? 'bg-red-500/10 text-red-400' : input.trim() ? 'bg-blue-600 text-white' : 'bg-[#27272a] text-zinc-600'}`}>
+                            <button
+                                data-testid="send-stop-button"
+                                onClick={isLoading ? stopChat : () => handleSendMessage()}
+                                disabled={!isLoading && !input.trim()}
+                                className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 ${isLoading ? 'bg-red-500/10 text-red-400' : input.trim() ? 'bg-blue-600 text-white' : 'bg-[#27272a] text-zinc-600'}`}
+                            >
                                 {isLoading ? <Square className="w-4 h-4 fill-current" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
                             </button>
                         </div>

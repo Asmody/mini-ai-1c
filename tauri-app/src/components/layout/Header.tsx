@@ -314,10 +314,16 @@ export function Header({
                         </div>
                     </div>
                 )}
-                <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-zinc-900/50 border border-zinc-800/50">
+                <div
+                    data-testid="bsl-status"
+                    className="flex items-center gap-2 px-2 py-1 rounded-md bg-zinc-900/50 border border-zinc-800/50"
+                >
                     <div className={`w-1.5 h-1.5 rounded-full ${!bslStatus ? 'bg-zinc-600 animate-pulse' : bslStatus.connected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`} />
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest hidden md:inline">BSL LS</span>
-                    <span className="text-[10px] text-zinc-600 font-medium hidden md:inline">
+                    <span
+                        data-testid="bsl-status-text"
+                        className="text-[10px] text-zinc-600 font-medium hidden md:inline"
+                    >
                         {!bslStatus ? 'Initializing...' : bslStatus.connected ? 'Connected' : 'Offline'}
                     </span>
                 </div>
@@ -432,6 +438,7 @@ export function Header({
                     {settings?.theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                 </button>
                 <button
+                    data-testid="settings-button"
                     onClick={() => onOpenSettings()}
                     className="p-2 hover:bg-[#27272a] rounded-lg transition-colors"
                     title="Settings"
