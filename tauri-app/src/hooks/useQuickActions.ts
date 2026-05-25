@@ -31,6 +31,7 @@ import { buildDescribePrompt } from '../utils/quickActionPrompts';
 import {
   buildPromptFromSlashCommandTemplate,
   findSlashCommandById,
+  getQuickActionCommandId,
   resolveSlashCommandsForRuntime,
 } from '../utils/slashCommands';
 import { DEFAULT_SLASH_COMMANDS, type AppSettings } from '../types/settings';
@@ -72,14 +73,6 @@ type ResultType = 'comment' | 'diff' | 'explain_only';
 type WriteIntent = QuickActionWriteIntent;
 type CaptureScope = QuickActionCaptureScope;
 
-const QUICK_ACTION_COMMAND_IDS = {
-  describe: 'desc',
-  elaborate: 'elaborate',
-  fix: 'fix',
-  explain: 'explain',
-  review: 'review',
-} as const;
-
 function buildSettingsBackedQuickActionPrompt(
   action: string,
   settings: AppSettings | null | undefined,
@@ -90,7 +83,7 @@ function buildSettingsBackedQuickActionPrompt(
   },
   options: { customOnly?: boolean } = {},
 ): string | null {
-  const commandId = QUICK_ACTION_COMMAND_IDS[action as keyof typeof QUICK_ACTION_COMMAND_IDS];
+  const commandId = getQuickActionCommandId(action);
   if (!commandId) {
     return null;
   }

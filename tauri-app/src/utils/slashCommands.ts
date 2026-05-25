@@ -1,5 +1,21 @@
 import type { SlashCommand } from '../types/settings';
 
+export type ConfiguratorQuickAction = 'describe' | 'elaborate' | 'fix' | 'explain' | 'review';
+
+export interface QuickActionSlashCommandBinding {
+  action: ConfiguratorQuickAction;
+  commandId: string;
+  menuLabel: string;
+}
+
+const QUICK_ACTION_BINDINGS: readonly QuickActionSlashCommandBinding[] = [
+  { action: 'describe', commandId: 'desc', menuLabel: 'Описание' },
+  { action: 'elaborate', commandId: 'elaborate', menuLabel: 'Доработать...' },
+  { action: 'fix', commandId: 'fix', menuLabel: 'Исправить' },
+  { action: 'explain', commandId: 'explain', menuLabel: 'Объяснить' },
+  { action: 'review', commandId: 'review', menuLabel: 'Ревью кода' },
+] as const;
+
 export interface SlashCommandTemplateValues {
   code?: string | null;
   query?: string | null;
@@ -46,4 +62,22 @@ export function findSlashCommandById(
   id: string,
 ): SlashCommand | undefined {
   return commands.find((command) => command.id === id);
+}
+
+export function getQuickActionBindings(): QuickActionSlashCommandBinding[] {
+  return QUICK_ACTION_BINDINGS.map((binding) => ({ ...binding }));
+}
+
+export function getQuickActionCommandId(
+  action: ConfiguratorQuickAction | string,
+): string | undefined {
+  return QUICK_ACTION_BINDINGS.find((binding) => binding.action === action)?.commandId;
+}
+
+export function getQuickActionMenuLabel(commandId: string): string | undefined {
+  return QUICK_ACTION_BINDINGS.find((binding) => binding.commandId === commandId)?.menuLabel;
+}
+
+export function isQuickActionSlashCommand(commandId: string): boolean {
+  return QUICK_ACTION_BINDINGS.some((binding) => binding.commandId === commandId);
 }

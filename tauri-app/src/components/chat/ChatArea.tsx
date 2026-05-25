@@ -28,7 +28,11 @@ import { ContextUsageBar } from './ContextUsageBar';
 import { applySelectiveFixScopeInstructions } from '../../utils/fixPromptScope';
 import { formatSyntaxSafeFallbackMessage, isRecoverableSyntaxValidationMessage, salvageSyntaxSafeDiffBlocks } from '../../utils/bslSyntaxGuard';
 import { resolveEffectiveSelectedDiagnostics } from '../../utils/diagnosticsSelection';
-import { resolveSlashCommandsForRuntime } from '../../utils/slashCommands';
+import {
+    findSlashCommandById,
+    getQuickActionCommandId,
+    resolveSlashCommandsForRuntime,
+} from '../../utils/slashCommands';
 import { getStreamingAutoScrollTop, isChatNearBottom } from '../../utils/chatAutoScroll';
 import {
     createDiffRenderSummaryCache,
@@ -442,6 +446,23 @@ export const ChatArea = memo(function ChatArea({
         );
     }, [availableCommands, resolvedSlashCommands]);
 
+    const resolveSlashCommandById = useCallback((commandId: string): SlashCommand | undefined => {
+        return (
+            findSlashCommandById(resolvedSlashCommands, commandId) ||
+            findSlashCommandById(DEFAULT_SLASH_COMMANDS, commandId)
+        );
+    }, [resolvedSlashCommands]);
+
+    const buildSlashCommandTextById = useCallback((commandId: string, query?: string | null): string => {
+        const command = resolveSlashCommandById(commandId);
+        if (!command) {
+            return '';
+        }
+
+        const trimmedQuery = query?.trim();
+        return trimmedQuery ? `/${command.command} ${trimmedQuery}` : `/${command.command}`;
+    }, [resolveSlashCommandById]);
+
     const expandSlashCommand = useCallback(async (
         rawInput: string,
         options?: {
@@ -598,7 +619,13 @@ export const ChatArea = memo(function ChatArea({
                 setConfiguratorTitleCtx(parsedTitleContext);
                 onActiveDiffChange?.('');
 
-                const prepared = await expandSlashCommand('/объясни', {
+                const commandId = getQuickActionCommandId('explain');
+                const commandText = commandId ? buildSlashCommandTextById(commandId) : '';
+                if (!commandText) {
+                    throw new Error('Не найдена system-команда для действия "Объяснить".');
+                }
+
+                const prepared = await expandSlashCommand(commandText, {
                     codeOverride: explainCode,
                 });
 
@@ -618,7 +645,7 @@ export const ChatArea = memo(function ChatArea({
         return () => {
             unlisten.then(fn => fn());
         };
-    }, [addSystemMessage, expandSlashCommand, onActiveDiffChange, parsedTitleContext, sendMessage]);
+    }, [addSystemMessage, buildSlashCommandTextById, expandSlashCommand, onActiveDiffChange, parsedTitleContext, sendMessage]);
 
     useEffect(() => {
         const unlisten = listen<OverlayQuickActionSessionPayload>('open-quick-action-session-from-overlay', async (event) => {
@@ -627,18 +654,13 @@ export const ChatArea = memo(function ChatArea({
                 return;
             }
 
-            const commandText = (() => {
-                switch (event.payload.action) {
-                    case 'review':
-                        return '/ревью';
-                    case 'fix':
-                        return '/исправить';
-                    case 'elaborate':
-                        return `/доработай ${event.payload.task?.trim() ?? ''}`.trim();
-                    default:
-                        return '';
-                }
-            })();
+            const commandId = getQuickActionCommandId(event.payload.action);
+            const commandText = commandId
+                ? buildSlashCommandTextById(
+                    commandId,
+                    event.payload.action === 'elaborate' ? event.payload.task : null,
+                )
+                : '';
 
             if (!commandText) {
                 return;
@@ -675,7 +697,7 @@ export const ChatArea = memo(function ChatArea({
         return () => {
             unlisten.then(fn => fn());
         };
-    }, [addSystemMessage, expandSlashCommand, onActiveDiffChange, parsedTitleContext, sendMessage]);
+    }, [addSystemMessage, buildSlashCommandTextById, expandSlashCommand, onActiveDiffChange, parsedTitleContext, sendMessage]);
 
     // Update status when generation completed
     const prevIsLoadingRef = useRef(false);

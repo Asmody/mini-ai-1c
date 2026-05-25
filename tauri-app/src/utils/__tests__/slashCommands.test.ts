@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildPromptFromSlashCommandTemplate,
+  getQuickActionBindings,
+  getQuickActionCommandId,
+  getQuickActionMenuLabel,
+  isQuickActionSlashCommand,
   resolveSlashCommandsForRuntime,
 } from '../slashCommands';
 import { DEFAULT_SLASH_COMMANDS, type SlashCommand } from '../../types/settings';
@@ -41,4 +45,33 @@ test('buildPromptFromSlashCommandTemplate replaces quick action placeholders eve
     prompt,
     'Q=add guard\nD=line 1: missing semicolon\nC1=Procedure Test()\nC2=Procedure Test()',
   );
+});
+
+test('quick action bindings cover all configurator context menu commands', () => {
+  assert.deepEqual(getQuickActionBindings(), [
+    { action: 'describe', commandId: 'desc', menuLabel: 'Описание' },
+    { action: 'elaborate', commandId: 'elaborate', menuLabel: 'Доработать...' },
+    { action: 'fix', commandId: 'fix', menuLabel: 'Исправить' },
+    { action: 'explain', commandId: 'explain', menuLabel: 'Объяснить' },
+    { action: 'review', commandId: 'review', menuLabel: 'Ревью кода' },
+  ]);
+});
+
+test('quick action bindings point to editable system slash commands', () => {
+  const defaultsById = new Map(DEFAULT_SLASH_COMMANDS.map((command) => [command.id, command]));
+
+  for (const binding of getQuickActionBindings()) {
+    const command = defaultsById.get(binding.commandId);
+    assert.ok(command, `missing default command for ${binding.action}`);
+    assert.equal(command?.is_system, true);
+    assert.equal(isQuickActionSlashCommand(command!.id), true);
+    assert.equal(getQuickActionCommandId(binding.action), command!.id);
+    assert.equal(getQuickActionMenuLabel(command!.id), binding.menuLabel);
+  }
+});
+
+test('elaborate quick action is separate from refactor command', () => {
+  assert.equal(getQuickActionCommandId('elaborate'), 'elaborate');
+  assert.equal(getQuickActionCommandId('elaborate') === 'refactor', false);
+  assert.equal(isQuickActionSlashCommand('refactor'), false);
 });
