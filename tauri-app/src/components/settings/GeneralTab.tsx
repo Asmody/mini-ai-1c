@@ -223,28 +223,32 @@ export function GeneralTab({
                     </h3>
 
                     <div className="space-y-4 rounded-xl border border-zinc-700 bg-zinc-800/50 p-5">
-                        <div className="grid gap-2 sm:grid-cols-3">
-                            {([
-                                ['system', 'Системный'],
-                                ['disabled', 'Выкл'],
-                                ['custom', 'Свой'],
-                            ] as const).map(([mode, label]) => {
-                                const active = proxy.mode === mode;
-                                return (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        onClick={() => updateProxy({ mode: mode as ProxyMode })}
-                                        className={`rounded-lg border px-3 py-2 text-sm transition ${
-                                            active
-                                                ? 'border-blue-500 bg-blue-600 text-white'
-                                                : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
-                                        }`}
-                                    >
-                                        {label}
-                                    </button>
-                                );
-                            })}
+                        <div className="overflow-hidden rounded-lg border border-zinc-700 text-xs font-medium">
+                            <div className="flex">
+                                {([
+                                    ['disabled', 'Выкл'],
+                                    ['system', 'Системный'],
+                                    ['custom', 'Свой'],
+                                ] as const).map(([mode, label], i) => {
+                                    const active = proxy.mode === mode;
+                                    return (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => updateProxy({ mode: mode as ProxyMode })}
+                                            className={`flex-1 py-2 transition-colors ${
+                                                i > 0 ? 'border-l border-zinc-700' : ''
+                                            } ${
+                                                active
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {proxy.mode === 'custom' && (
