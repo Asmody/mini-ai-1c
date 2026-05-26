@@ -10,15 +10,15 @@
 <!-- news:end -->
 
 <!-- release-news:start -->
-> **📋 Последний релиз: версия 1.2.7** — 8 мая 2026
+> **📋 Последний релиз: версия 1.2.8** — 26 мая 2026
 >
-> - **1С:Поиск**: несколько конфигураций, поддержка расширений и более подробные статусы индексации ([#155](https://github.com/hawkxtreme/mini-ai-1c/issues/155), [#123](https://github.com/hawkxtreme/mini-ai-1c/issues/123), [#117](https://github.com/hawkxtreme/mini-ai-1c/issues/117))
-> - **Node.js для MCP**: настраиваемый путь к Node.js и корректный запуск portable из сетевых UNC-папок ([#151](https://github.com/hawkxtreme/mini-ai-1c/issues/151), [#165](https://github.com/hawkxtreme/mini-ai-1c/issues/165))
-> - **LLM-настройки**: ручной `MAX TOKENS` больше не сбрасывается при переключении моделей ([#164](https://github.com/hawkxtreme/mini-ai-1c/issues/164))
-> - **1С:Напарник**: исправлена ошибка `422 Unprocessable Entity` при недоступных локальных tool calls ([#166](https://github.com/hawkxtreme/mini-ai-1c/issues/166))
-> - **Чат**: большой текущий контекст автоматически сжимается перед отправкой в модель
+> - **HTTP-прокси для всех LLM-провайдеров**: системный/ручной режим с аутентификацией для Anthropic, OpenAI, Codex, Напарника и загрузки BSL LS ([#134](https://github.com/hawkxtreme/mini-ai-1c/issues/134))
+> - **Редактируемые промпты quick actions**: команды Ctrl+Shift+1 (`/исправить`, `/описание` и др.) теперь правятся прямо в настройках Slash-команд ([#158](https://github.com/hawkxtreme/mini-ai-1c/issues/158))
+> - **Производительность чата**: кеш применимости диффов и отложенное распространение изменений снимают фризы при печати в длинных чатах ([#168](https://github.com/hawkxtreme/mini-ai-1c/issues/168), [#176](https://github.com/hawkxtreme/mini-ai-1c/issues/176))
+> - **Автопрокрутка**: чат остаётся «прикреплён» к низу во время стриминга ответа модели ([#163](https://github.com/hawkxtreme/mini-ai-1c/issues/163))
+> - **Стабильность настроек**: API-ключ не теряется при автообновлении профиля, дополнительные правила учитываются и в lightweight-промпте ([#162](https://github.com/hawkxtreme/mini-ai-1c/issues/162), [#160](https://github.com/hawkxtreme/mini-ai-1c/issues/160))
 >
-> [Подробнее о релизе →](https://github.com/hawkxtreme/mini-ai-1c/releases/tag/v1.2.7) · [Все релизы →](https://github.com/hawkxtreme/mini-ai-1c/releases)
+> [Подробнее о релизе →](https://github.com/hawkxtreme/mini-ai-1c/releases/tag/v1.2.8) · [Все релизы →](https://github.com/hawkxtreme/mini-ai-1c/releases)
 <!-- release-news:end -->
 
 > 🐛 **Нашли баг или есть вопрос?** Прочитайте [как правильно сообщить о проблеме →](how-to-report-an-issue.md) — там пошагово: что написать, как снять логи приложения и MCP-логи, и готовый шаблон issue.
